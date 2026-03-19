@@ -1595,10 +1595,10 @@ async function loadAll() {
     const hasReservation = Boolean(row.reservation_id);
     const meta = hasReservation
       ? [
+          chip(`Cabaña: ${row.cabin_name || "Sin asignar"}`),
           chip(`Canal/Pago ${formatChannelPaymentLabel(row.reservation_source, row.reservation_payment_method)}`),
           chip(`Llega ${formatDate(row.reservation_check_in)}`),
-          chip(`Sale ${formatDate(row.reservation_check_out)}`),
-          row.reservation_nights != null ? chip(`${row.reservation_nights} noche${Number(row.reservation_nights) === 1 ? "" : "s"}`) : "",
+          chip(`Sale ${formatDate(row.reservation_check_out)}`),          row.reservation_nights != null ? chip(`${row.reservation_nights} noche${Number(row.reservation_nights) === 1 ? "" : "s"}`) : "",
           Number(row.guest_alias_count || 0) > 1 ? chip(`Alias ${Number(row.guest_alias_count || 0)}`) : "",
           Number(row.guest_paid_before_latest || 0) > 0 ? chip(`Pagado previo ${money.format(row.guest_paid_before_latest || 0)}`) : "",
           Number(row.guest_total_nights || 0) > 0 ? chip(`Noches totales ${Number(row.guest_total_nights || 0)}`) : "",

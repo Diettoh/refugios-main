@@ -61,9 +61,11 @@ router.get("/", async (_req, res, next) => {
        all_reservations AS (
          SELECT
            c.name_key,
-           r.*
+           r.*,
+           cab.name AS cabin_name
          FROM canonical c
          JOIN reservations r ON r.guest_id = ANY(c.guest_ids)
+         LEFT JOIN cabins cab ON cab.id = r.cabin_id
        ),
        latest_reservation AS (
          SELECT *
@@ -76,6 +78,7 @@ router.get("/", async (_req, res, next) => {
              ar.check_in,
              ar.check_out,
              ar.total_amount,
+             ar.cabin_name,
              GREATEST(0, (ar.check_out - ar.check_in))::int AS nights,
              ROW_NUMBER() OVER (PARTITION BY ar.name_key ORDER BY ar.check_in DESC, ar.id DESC) AS rn
            FROM all_reservations ar
