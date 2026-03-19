@@ -10,6 +10,9 @@ if (!process.env.DATABASE_URL) {
 }
 
 const connectionString = process.env.DATABASE_URL;
+const maskedUrl = connectionString.replace(/:([^:@]+)@/, ":****@");
+console.log(`Conectando a DB: ${maskedUrl}`);
+
 const needsSsl = connectionString.includes("sslmode=require");
 const client = new Client({
   connectionString,
