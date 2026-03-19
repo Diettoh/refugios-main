@@ -127,6 +127,7 @@ router.get("/", async (req, res, next) => {
          g.full_name AS guest_name,
          g.document_id AS guest_document,
          g.tax_document_type AS guest_tax_type,
+         r.cabin_id,
          c.name AS cabin_name,
          r.source AS reservation_source,
          r.check_in AS reservation_check_in,
