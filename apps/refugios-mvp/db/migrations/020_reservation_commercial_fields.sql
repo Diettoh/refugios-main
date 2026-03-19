@@ -5,53 +5,8 @@
 -- - .planning/phases/02-campos-de-reserva/02-DISCUSSION.md
 -- - .planning/phases/02-campos-de-reserva/02-RESEARCH.md
 
--- Phase 1 persistence (UI already exposes these)
-ALTER TABLE reservations
-  ADD COLUMN IF NOT EXISTS nightly_rate NUMERIC(12,2),
-  ADD COLUMN IF NOT EXISTS nights INT;
-
--- RES-03: Cleaning supplement
-ALTER TABLE reservations
-  ADD COLUMN IF NOT EXISTS cleaning_supplement NUMERIC(12,2);
-
--- RES-05: Season type
-ALTER TABLE reservations
-  ADD COLUMN IF NOT EXISTS season_type TEXT;
-
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1
-    FROM pg_constraint
-    WHERE conrelid = 'reservations'::regclass
-      AND conname = 'reservations_season_type_check'
-  ) THEN
-    ALTER TABLE reservations
-      ADD CONSTRAINT reservations_season_type_check
-      CHECK (season_type IS NULL OR season_type IN ('alta', 'baja', 'temporada', 'permanente'));
-  END IF;
-END $$;
-
--- RES-06: Document type on reservation
-ALTER TABLE reservations
-  ADD COLUMN IF NOT EXISTS reservation_document_type TEXT;
-
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1
-    FROM pg_constraint
-    WHERE conrelid = 'reservations'::regclass
-      AND conname = 'reservations_reservation_document_type_check'
-  ) THEN
-    ALTER TABLE reservations
-      ADD CONSTRAINT reservations_reservation_document_type_check
-      CHECK (
-        reservation_document_type IS NULL
-        OR reservation_document_type IN ('boleta', 'factura', 'booking', 'ninguno')
-      );
-  END IF;
-END $$;
+-- NOTE: nightly_rate, nights, cleaning_supplement, season_type and reservation_document_type 
+-- were moved to 013_c_add_reservation_document_type.sql to support early seeding in 014.
 
 -- RES-04: Booking source / channel catalog (source column)
 -- Target values: booking, airbnb, web, direct, other
@@ -88,4 +43,3 @@ BEGIN
     ADD CONSTRAINT reservations_source_new_check
     CHECK (source IN ('booking', 'airbnb', 'web', 'direct', 'other'));
 END $$;
-
