@@ -2188,7 +2188,15 @@ h2.section__title {
 
   .section__header {
     flex-direction: column;
+    align-items: flex-start;
     gap: 0.75rem;
+  }
+
+  .section__actions {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
   }
 
   .card-grid {
@@ -2202,6 +2210,12 @@ h2.section__title {
   .filter-bar__controls {
     flex-direction: column;
     align-items: stretch;
+    gap: 0.75rem;
+  }
+
+  .filter-bar__actions {
+    width: 100%;
+    justify-content: space-between;
   }
 
   .form-row {
@@ -2214,7 +2228,38 @@ h2.section__title {
 
   .modal__panel {
     max-width: 100%;
-    border-radius: var(--radius-lg);
+    width: 100%;
+    margin: 0;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    position: absolute;
+    bottom: 0;
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+
+  .modal {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .table-container {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    margin: 0 -0.75rem;
+    border-radius: 0;
+    border-left: 0;
+    border-right: 0;
+  }
+
+  .table th,
+  .table td {
+    padding: 0.5rem 0.6rem;
+    font-size: 0.8rem;
+    white-space: nowrap;
+  }
+
+  .dashboard-charts {
+    grid-template-columns: 1fr !important;
   }
 }
 
