@@ -121,7 +121,7 @@ const state = {
   reservationsFilterMaxNights: "",
   reservationsFilterDocType: "",
   documentsFilterType: "",
-  cabinImages: []
+  cabins: []
 };
 
 function getCabinVisualDefaults(cabin) {
@@ -385,7 +385,7 @@ function toDataUrl(base64) {
 }
 
 function getCabinById(cabinId) {
-  return (state.cabinImages || []).find((c) => c.id === cabinId);
+  return (state.cabins || []).find((c) => c.id === cabinId);
 }
 
 function getCabinImages(cabinId) {
@@ -668,7 +668,7 @@ function renderSummary({ sales, expenses, reservations }) {
     const nights = Math.round((new Date(overlapEnd).getTime() - new Date(overlapStart).getTime()) / (24 * 60 * 60 * 1000));
     return acc + Math.max(0, nights);
   }, 0);
-  const operationalCabins = getOperationalCabins(state.cabinImages || []);
+  const operationalCabins = getOperationalCabins(state.cabins || []);
   const totalCabins = Math.max(1, operationalCabins.length || Number(state.totalCabins) || 1);
   const occupancyPctMonth = Math.min(100, Math.round((nightsSoldMonth / (totalCabins * daysInMonth)) * 100));
 
@@ -911,7 +911,7 @@ function isReservationActiveOnDate(reservation, day) {
 }
 
 function renderAvailability(reservations) {
-  const cabins = getOperationalCabins(state.cabinImages).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+  const cabins = getOperationalCabins(state.cabins).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
   const total = cabins.length;
   const active = reservations.filter((row) => isReservationActiveOnDate(row, state.availabilityDate));
   const occupiedCabinIds = new Set(active.map((r) => r.cabin_id).filter((id) => Number.isInteger(id)));
@@ -985,7 +985,7 @@ function renderOccupancyTimeline(reservations) {
   const container = document.getElementById("occupancy-timeline");
   if (!container) return;
 
-  const cabins = getOperationalCabins(state.cabinImages).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+  const cabins = getOperationalCabins(state.cabins).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
   const [yy, mm] = (state.calendarMonth || new Date().toISOString().slice(0, 7)).split("-").map(Number);
   const daysInMonth = new Date(yy, mm, 0).getDate();
   const today = new Date().toISOString().slice(0, 10);
@@ -1154,7 +1154,7 @@ function renderCalendar(reservations) {
   const gridEl = document.getElementById("calendar-grid");
   if (!container || !titleEl) return;
 
-  const cabins = getCalendarCabins(state.cabinImages);
+  const cabins = getCalendarCabins(state.cabins);
   const totalCabins = Math.max(1, cabins.length);
 
   const [yy, mm] = (state.calendarMonth || new Date().toISOString().slice(0, 7)).split("-").map(Number);
@@ -1423,7 +1423,7 @@ function bindCabinFormOpenButtons() {
     if (editBtn) {
       const cabinId = Number(editBtn.dataset.cabinId);
       if (Number.isInteger(cabinId) && cabinId >= 1) {
-        const cabin = (state.cabinImages || []).find((c) => c.id === cabinId);
+        const cabin = (state.cabins || []).find((c) => c.id === cabinId);
         openCabinFormModal(cabin || { id: cabinId, name: "", description: "", sort_order: 0 });
       }
       return;
@@ -1552,7 +1552,8 @@ async function loadAll() {
     api("/api/documents"),
     api("/api/cabins").catch(() => ({ cabins: [] }))
   ]);
-  state.cabinImages = cabinsData.cabins || [];
+  state.cabins = cabinsData.cabins || [];
+  if (typeof refreshVentasCabinFilter === 'function') refreshVentasCabinFilter();
   state.sales = sales;
   state.expenses = expenses;
   state.expensesMeta = expensesMeta || { categories: [], category_options: [], category_labels: {} };
@@ -1663,13 +1664,13 @@ async function loadAll() {
       <div class="record-actions">${deleteButton("documents", row.id)}</div>
     </li>`);
 
-  renderCabinsList(state.cabinImages);
+  renderCabinsList(state.cabins);
   const cabinSelect = document.getElementById("reservation-cabin");
   if (cabinSelect) {
     const current = cabinSelect.value;
     cabinSelect.innerHTML =
       '<option value="">Seleccionar</option>' +
-      getOperationalCabins(state.cabinImages)
+      getOperationalCabins(state.cabins)
         .map((c) => {
           const code = c.short_code || c.name || "";
           const size =
@@ -1731,7 +1732,7 @@ async function loadDashboardAnalytics() {
     const data = await api(`/api/dashboard/analytics?${params}`);
     renderDashboardCharts(data);
     renderDashboardAlerts(data.alerts || []);
-    const cabins = data.cabinsTotal || (state.cabinImages || []).length || 1;
+    const cabins = data.cabinsTotal || (state.cabins || []).length || 1;
     const infoCabins = document.getElementById("info-cabins");
     const infoAlerts = document.getElementById("info-alerts-count");
     const infoSales = document.getElementById("info-sales-total");
@@ -2764,11 +2765,16 @@ function setupMonthlyReportDashboard() {
 
   if (!monthSelect || !yearSelect) return;
 
-  // Llenar select de cabañas
-  if (cabinFilter && state.cabins) {
-    cabinFilter.innerHTML = '<option value="">Todas</option>' +
-      state.cabins.map(c => `<option value="${c.id}">${c.name}</option>`).join("");
-  }
+  // Llenar select de cabañas (se llama también desde loadAll)
+  window.refreshVentasCabinFilter = () => {
+    if (cabinFilter && state.cabins) {
+      const current = cabinFilter.value;
+      cabinFilter.innerHTML = '<option value="">Todas</option>' +
+        state.cabins.map(c => `<option value="${c.id}">${c.name}</option>`).join("");
+      if (current) cabinFilter.value = current;
+    }
+  };
+  refreshVentasCabinFilter();
 
   const now = new Date();
   const currentYear = now.getFullYear();
@@ -2978,6 +2984,7 @@ function renderMonthlyCharts(sales, expenses, from, to) {
 
 function renderMonthlyTables(from, to, sales, expenses) {
   const salesBody = document.getElementById("monthly-sales-table-body");
+  const summaryBody = document.getElementById("ventas-summary-table-body");
   if (!salesBody) return;
   sales = Array.isArray(sales) ? sales : [];
 
@@ -2986,6 +2993,12 @@ function renderMonthlyTables(from, to, sales, expenses) {
   const salesCountEl = document.getElementById("ventas-kpi-sales-count");
   if (salesTotalEl) salesTotalEl.textContent = money.format(totalSales);
   if (salesCountEl) salesCountEl.textContent = String(sales.length);
+
+  const cabinById = new Map((state.cabins || []).map((c) => [Number(c.id), c]));
+  const summary = {
+    casa: { label: "CASA", count: 0, nights: 0, revenue: 0 },
+    refugios: { label: "REFUGIOS", count: 0, nights: 0, revenue: 0 }
+  };
 
   salesBody.innerHTML = sales
     .map(
@@ -3002,6 +3015,17 @@ function renderMonthlyTables(from, to, sales, expenses) {
         const additional = row.reservation_additional_charge || 0;
         const taxType = (row.guest_tax_type || "sii").toUpperCase();
 
+        const cabin = cabinById.get(Number(row.cabin_id));
+        const isCasa = getCabinCapacity(cabin) >= 8;
+        const rc = isCasa ? "C" : "R";
+
+        if (row.category === "lodging") {
+          const bucket = isCasa ? summary.casa : summary.refugios;
+          bucket.count += 1;
+          bucket.nights += nights;
+          bucket.revenue += Number(row.amount || 0);
+        }
+
         return `
     <tr>
       <td>${formatDate(row.sale_date)}</td>
@@ -3009,7 +3033,12 @@ function renderMonthlyTables(from, to, sales, expenses) {
         <div><strong>${row.guest_name || "-"}</strong></div>
         <div style="font-size:0.8em; color:gray;">${rut}</div>
       </td>
-      <td>${row.cabin_name || "-"}</td>
+      <td>
+        <div style="display:flex; align-items:center; gap:4px;">
+          <span class="badge badge--ghost" style="font-size:0.7em; font-weight:800; min-width:1.5em; text-align:center;">${rc}</span>
+          <span>${row.cabin_name || "-"}</span>
+        </div>
+      </td>
       <td>
         <div style="font-size:0.85em;">In: ${checkIn}</div>
         <div style="font-size:0.85em;">Out: ${checkOut}</div>
@@ -3033,6 +3062,20 @@ function renderMonthlyTables(from, to, sales, expenses) {
       }
     )
     .join("") || "<tr><td colspan='12'>Sin ventas en este mes</td></tr>";
+
+  if (summaryBody) {
+    summaryBody.innerHTML = [summary.casa, summary.refugios]
+      .map(
+        (s) => `
+      <tr>
+        <td style="font-weight:800;">${s.label}</td>
+        <td>${s.count}</td>
+        <td>${s.nights}</td>
+        <td>${money.format(s.revenue)}</td>
+      </tr>`
+      )
+      .join("");
+  }
 }
 
 function channelLetter(source) {
@@ -3071,7 +3114,7 @@ function renderVentasExcel(from, to, reservations) {
   const summaryBody = document.getElementById("ventas-excel-summary-body");
   if (!body || !totalEstadiaEl || !totalUtilidadEl || !summaryBody) return;
 
-  const cabinById = new Map((state.cabinImages || []).map((c) => [Number(c.id), c]));
+  const cabinById = new Map((state.cabins || []).map((c) => [Number(c.id), c]));
   const rows = (Array.isArray(reservations) ? reservations : [])
     .filter((r) => inDateRange(r.check_in, from, to) || inDateRange(r.check_out, from, to))
     .sort((a, b) => dateWeight(a.check_in) - dateWeight(b.check_in));
@@ -3086,8 +3129,7 @@ function renderVentasExcel(from, to, reservations) {
     rows
       .map((r, idx) => {
         const cabin = cabinById.get(Number(r.cabin_id));
-        const defaults = getCabinVisualDefaults(cabin);
-        const isCasa = defaults.capacity >= 8;
+        const isCasa = getCabinCapacity(cabin) >= 8;
         const rc = isCasa ? "C" : "R";
         const guests = Number(r.guests_count) || 0;
         const paxAd = Math.max(0, guests - Number(getCabinCapacity(cabin) || guests));
@@ -3428,7 +3470,7 @@ function renderCabanasDash(from, to) {
     const ci = (typeof r.check_in === "string" ? r.check_in : "").slice(0, 10);
     return ci >= from && ci <= to;
   });
-  const cabins = state.cabinImages || [];
+  const cabins = state.cabins || [];
   const sales = (state.sales || []).filter((s) => inDateRange(s.sale_date, from, to));
 
   const revenueByReservation = new Map();
