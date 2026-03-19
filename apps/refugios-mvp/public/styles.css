@@ -2252,16 +2252,20 @@ h2.section__title {
   }
 
   .calendar-wrap {
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    margin: 0 -0.75rem 1.25rem -0.75rem;
-    border-radius: 0;
-    border-left: 0;
-    border-right: 0;
+    /* Eliminamos el overflow de aquí para que el título no se mueva */
+    margin-bottom: 1.25rem;
   }
 
   .calendar-grid {
-    min-width: 700px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    margin: 0 -1.25rem; /* compenso el padding del wrap */
+    padding: 0 1.25rem 1rem 1.25rem; /* devuelvo el padding y agrego para el scrollbar */
+  }
+
+  .calendar-weekdays,
+  .calendar-days {
+    min-width: 600px; /* Asegura que no se aplaste */
   }
 
   .table th,
