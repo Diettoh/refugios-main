@@ -1307,39 +1307,39 @@ h2.section__title {
 }
 
 .calendar-cabin-chip.is-a {
-  border-color: rgba(96, 165, 250, 0.75);
+  border-color: rgba(59, 130, 246, 0.75);
 }
 
 .calendar-cabin-chip.is-b {
-  border-color: rgba(45, 212, 191, 0.75);
+  border-color: rgba(239, 68, 68, 0.75);
 }
 
 .calendar-cabin-chip.is-p {
-  border-color: rgba(245, 158, 11, 0.75);
+  border-color: rgba(34, 197, 94, 0.75);
 }
 
 .calendar-cabin-chip.is-c {
-  border-color: rgba(248, 113, 113, 0.75);
+  border-color: rgba(234, 179, 8, 0.75);
 }
 
 .calendar-cabin-chip.is-active.is-a {
   color: #eff6ff;
-  background: rgba(59, 130, 246, 0.95);
+  background: rgba(37, 99, 235, 0.95);
 }
 
 .calendar-cabin-chip.is-active.is-b {
-  color: #ecfeff;
-  background: rgba(20, 184, 166, 0.95);
+  color: #fef2f2;
+  background: rgba(220, 38, 38, 0.95);
 }
 
 .calendar-cabin-chip.is-active.is-p {
-  color: #111827;
-  background: rgba(245, 158, 11, 0.95);
+  color: #f0fdf4;
+  background: rgba(22, 163, 74, 0.95);
 }
 
 .calendar-cabin-chip.is-active.is-c {
-  color: #fff1f2;
-  background: rgba(239, 68, 68, 0.92);
+  color: #111827;
+  background: rgba(234, 179, 8, 0.95);
 }
 
 .calendar-day.is-other-month .calendar-guest-row,
