@@ -1,8 +1,8 @@
 import { Pool } from "pg";
 import "dotenv/config";
 
-const connectionString = process.env.DATABASE_URL;
-const needsSsl = connectionString && connectionString.includes("sslmode=require");
+const connectionString = process.env.DATABASE_URL ? process.env.DATABASE_URL.trim() : null;
+const needsSsl = connectionString && (connectionString.includes("sslmode=require") || connectionString.includes("render.com"));
 const pool = connectionString
   ? new Pool({
       connectionString,
