@@ -1,0 +1,32 @@
+VENTAS 2026
+NOMBRE 	R / C 	T / P / A / B 	PAX 	PAX Ad 	NOCHES 	PRECIO POR NOCHE 	SUPLEMENTO LIMPIEZA 	TOTAL POR NOCHE 	TOTAL Estadía 	UTILIDAD 	BOLETAS
+1 Francisco Espinoza 	R 	A 	2 	0 	4 	90.000 	30.000 	90.000 	390.000 -$ 	378.300- SII
+2 Fernanda Escorza 	R 	P 	2 	0 	3 	90.000 	30.000 	90.000 	300.000 -$ 	295.800-
+3 Barbara 	R 	T 	2 	0 	1 	120.000 	120.000 	120.000 -$ 	120.000- SII
+4 Nicolas Muñoz 	R 	A 	2 	0 	2 	90.000 	90.000 	180.000 -$ 	174.600- SII
+5 Alberto Etchegaray 	C 	A 	5 	0 	1 	220.000 	220.000 	220.000 -$ 	213.400- SII
+6 ... 	C 	A 	5 	0 	2 	240.000 	40.000 	240.000 	520.000 -$ 	504.400- ...
+7 	0 	0 	0 -$ 	--
+8 	0 	0 	0 -$ 	--
+9 	0 	0 	0 -$ 	--
+10 	0 	0 	0 -$ 	--
+11 	0 	0 	0 -$ 	--
+12 	0 	0 	0 -$ 	--
+13 	0 	0 	0 -$ 	--
+14 	0 	0 	0 -$ 	--
+15 	0 	0 	0 -$ 	--
+16 	0 	0 	0 -$ 	--
+17 	0 	0 	0 -$ 	--
+18 	0 	0 	0 -$ 	--
+19 	0 	0 	0 -$ 	--
+20 	0 	0 	0 -$ 	--
+21 	0 	0 	0 -$ 	--
+22 	0 	0 	0 -$ 	--
+23 	0 	0 	0 -$ 	--
+24 	0 	0 -$ 	--
+TOTAL 	-$ 	1.686.500-
+CASA 	REFUGIOS
+TOTA
+L
+NOCH
+ES 	3 	10

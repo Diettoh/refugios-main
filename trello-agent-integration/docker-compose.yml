@@ -1,0 +1,9 @@
+services:
+  trello-agent-integration:
+    build: .
+    container_name: trello-agent-integration
+    env_file:
+      - .env
+    ports:
+      - "3400:3400"
+    restart: unless-stopped

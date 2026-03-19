@@ -1,0 +1,19 @@
+{
+  "name": "trello-agent-integration",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Servicio dedicado para integracion Trello de agentes IA en productos digitales.",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "check": "node --check src/server.js && node --check src/app.js && node --check src/trello/client.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "express": "^4.21.2"
+  }
+}

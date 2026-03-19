@@ -1,0 +1,56 @@
+# AGENTS.md (Global)
+
+Estas reglas aplican por defecto a todos los subrepos bajo `/home/rreyes/projects`, salvo que un repo tenga instrucciones locales más específicas.
+
+## Deploy (Regla principal)
+- Siempre priorizar `Render` para deploy compartible con cliente/equipo.
+- Link operativo de referencia: `https://dashboard.render.com/`
+- Al terminar cambios relevantes: validar si corresponde subir a Git y dejar deploy listo.
+- Regla local de monitoreo: despues de cada push/deploy relevante en `main`, verificar estado en Render (healthcheck + estado del ultimo deploy via API/hook cuando exista) antes de dar por cerrada la entrega al cliente.
+
+### Comando gatillo `#deploy`
+- Si el usuario escribe exactamente `#deploy`, se interpreta como aprobacion explicita para:
+  1. versionar cambios pendientes (commit),
+  2. push a la rama acordada (por defecto `main`),
+  3. disparar y/o validar deploy en Render con los scripts del repo.
+- Ante `#deploy`, no pedir reconfirmacion, salvo que falten variables criticas de entorno o permisos externos.
+
+### Comandos operativos de chat
+- `#help`: mostrar lista de comandos disponibles con descripcion breve de cada uno.
+- `#rule <texto>`: agregar una nueva regla operativa al archivo de instrucciones del repo (sin borrar reglas existentes).
+- `#demo`: levantar el ambiente local (hacer `npm --prefix apps/refugios-mvp run start`) cuando sea necesario para pruebas.
+- `#version <número>`: actualizar el indicador `UI_VERSION` y cualquier otro widget visible para reflejar la nueva versión de la UI antes de documentar el deploy.
+- `#doc-version`: documentar el número actual de `UI_VERSION` en el `README.md` (sección de Deploy o equivalente) siempre que se haga un cambio visible de versión.
+- `#830`: actualizar la documentación técnica para reflejar cualquier cambio relevante del SRS IEEE 830, incluyendo secciones nuevas o revisiones de requisitos.
+
+## Flujo estándar por proyecto
+1. Revisar estado Git y rama activa.
+2. Ejecutar validaciones mínimas (lint/test/check si existen).
+3. Commit claro y push a `main` o rama acordada.
+4. Dejar instrucciones de ejecución/deploy en README.
+
+## Stack y DB
+- Preferir Postgres (Neon cuando aplique) con `DATABASE_URL` por variables de entorno.
+- Mantener migraciones versionadas (`db/migrations`) y scripts de seed/import.
+
+## Docker
+- Si el proyecto es desplegable, incluir:
+  - `Dockerfile`
+  - `.dockerignore`
+  - `docker-compose.yml` (si aporta para local)
+
+## Demo y revisión rápida
+- Para revisión inmediata, se puede usar TryCloudflare temporalmente.
+- Para cliente final o colaboración continua, usar URL estable en Render.
+
+## Documentación mínima obligatoria
+- `README.md` con:
+  - cómo correr local
+  - variables de entorno
+  - cómo desplegar
+- Si es proyecto para cliente: incluir SRS base (IEEE 830 o equivalente breve).
+
+## Convenciones de calidad
+- Evitar hardcodear secretos en repositorio.
+- Mantener cambios enfocados al requerimiento del cliente.
+- Si aparece trabajo no pedido, documentarlo como opcional y no bloquear entrega.

@@ -1,0 +1,40 @@
+# Levanta DB + app para exponer por Cloudflare Tunnel.
+# cloudflared corre en el host: cloudflared tunnel --url http://localhost:3000
+# La URL del tunnel cambia cada vez (ej. https://xxx.trycloudflare.com)
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: refugios-db-tunnel
+    environment:
+      POSTGRES_USER: refugios
+      POSTGRES_PASSWORD: refugios_qa
+      POSTGRES_DB: refugios
+    ports:
+      - "5433:5432"
+    volumes:
+      - refugios_pgdata_tunnel:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U refugios"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: refugios-mvp-tunnel
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: 3000
+      # DB interna (red Docker)
+      DATABASE_URL: postgresql://refugios:refugios_qa@db:5432/refugios
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  refugios_pgdata_tunnel:

@@ -1,0 +1,39 @@
+{
+  "name": "refugios-mvp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch src/server.js",
+    "start": "node src/server.js",
+    "db:migrate": "node scripts/migrate.mjs",
+    "db:seed": "node scripts/seed.mjs",
+    "db:dedupe-seed": "node scripts/dedupe-seed.mjs",
+    "db:import": "node scripts/import-historical.mjs",
+    "db:import-pdf-excel": "node scripts/import-pdf-excel.mjs",
+    "check": "node --check src/server.js && node --check src/app.js && node --check src/routes/cabins.js && node --check scripts/migrate.mjs",
+    "db:sync-pdf": "node scripts/sync-pdfs.mjs",
+    "db:check": "node scripts/check-db.mjs",
+    "pdf:compare": "node scripts/compare-export-pdfs.mjs",
+    "pdf:plan": "node scripts/generate-pdf-action-plan.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "db:extract-ventas-staging": "node scripts/extract-ventas-staging.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.3",
+    "pdfkit": "^0.17.2",
+    "pdf-parse": "^2.4.5",
+    "pg": "^8.13.1",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "supertest": "^7.2.2"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "name": "deploy-boilerplate-factory",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "new": "node tools/create-boilerplate.mjs",
+    "notify:test": "./tools/notify-whatsapp.sh \"Prueba Codex finalizado\"",
+    "install:refugios-mvp": "npm install --prefix apps/refugios-mvp",
+    "start:refugios-mvp": "npm run start --prefix apps/refugios-mvp",
+    "dev:refugios-mvp": "npm run dev --prefix apps/refugios-mvp",
+    "migrate:refugios-mvp": "npm run db:migrate --prefix apps/refugios-mvp"
+  }
+}

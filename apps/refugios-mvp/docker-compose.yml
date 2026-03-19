@@ -1,0 +1,35 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: refugios-db
+    environment:
+      POSTGRES_USER: refugios
+      POSTGRES_PASSWORD: refugios_qa
+      POSTGRES_DB: refugios
+    ports:
+      - "5433:5432"
+    volumes:
+      - refugios_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U refugios"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: refugios-mvp
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: 3000
+      DATABASE_URL: postgresql://refugios:refugios_qa@db:5432/refugios
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  refugios_pgdata:

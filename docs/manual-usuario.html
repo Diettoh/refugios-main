@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Manual de Usuario · Refugios Malalcahuello</title>
+  <style>
+    /* ── Variables ─────────────────────────────────────────── */
+    :root {
+      --blue:    #1a56db;
+      --blue-lt: #e8f0fe;
+      --dark:    #0f172a;
+      --gray:    #64748b;
+      --gray-lt: #f1f5f9;
+      --border:  #e2e8f0;
+      --green:   #16a34a;
+      --amber:   #d97706;
+      --red:     #dc2626;
+      --radius:  6px;
+      --font:    'Segoe UI', system-ui, -apple-system, sans-serif;
+    }
+
+    /* ── Reset base ────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--font);
+      font-size: 10.5pt;
+      color: #1e293b;
+      background: #fff;
+      line-height: 1.6;
+    }
+
+    /* ── Layout de pantalla ────────────────────────────────── */
+    @media screen {
+      body { max-width: 820px; margin: 0 auto; padding: 2rem 1.5rem 4rem; }
+    }
+
+    /* ── Tipografía ────────────────────────────────────────── */
+    h1 { font-size: 22pt; font-weight: 800; color: var(--dark); line-height: 1.2; }
+    h2 { font-size: 14pt; font-weight: 700; color: var(--blue); margin-top: 2rem; margin-bottom: 0.6rem; border-bottom: 2px solid var(--blue); padding-bottom: 0.3rem; }
+    h3 { font-size: 11pt; font-weight: 700; color: var(--dark); margin-top: 1.2rem; margin-bottom: 0.4rem; }
+    h4 { font-size: 10pt; font-weight: 600; color: var(--gray); margin-top: 1rem; margin-bottom: 0.3rem; text-transform: uppercase; letter-spacing: 0.05em; }
+    p  { margin-bottom: 0.6rem; }
+    ul, ol { margin: 0.4rem 0 0.8rem 1.4rem; }
+    li { margin-bottom: 0.25rem; }
+    strong { font-weight: 600; }
+
+    /* ── Portada ───────────────────────────────────────────── */
+    .cover {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 4rem 0;
+      page-break-after: always;
+    }
+    .cover__logo {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 3rem;
+    }
+    .cover__logo svg { flex-shrink: 0; }
+    .cover__logo-text { font-size: 20pt; font-weight: 800; color: var(--blue); }
+    .cover__logo-sub  { font-size: 11pt; color: var(--gray); display: block; }
+    .cover__rule { width: 60px; height: 4px; background: var(--blue); margin: 1.5rem 0; border-radius: 2px; }
+    .cover__title { font-size: 28pt; font-weight: 800; color: var(--dark); line-height: 1.15; margin-bottom: 0.5rem; }
+    .cover__subtitle { font-size: 13pt; color: var(--gray); margin-bottom: 2.5rem; }
+    .cover__meta { font-size: 9pt; color: var(--gray); border-top: 1px solid var(--border); padding-top: 1rem; display: flex; gap: 2rem; flex-wrap: wrap; }
+    .cover__meta span { display: block; }
+    .cover__meta strong { color: var(--dark); }
+
+    /* ── TOC ───────────────────────────────────────────────── */
+    .toc { page-break-after: always; }
+    .toc__list { list-style: none; margin: 0; padding: 0; }
+    .toc__item { display: flex; align-items: baseline; gap: 0.5rem; padding: 0.35rem 0; border-bottom: 1px dotted var(--border); font-size: 10pt; }
+    .toc__num  { font-weight: 700; color: var(--blue); min-width: 1.5rem; }
+    .toc__title { flex: 1; }
+    .toc__page { color: var(--gray); font-size: 9pt; }
+
+    /* ── Secciones ─────────────────────────────────────────── */
+    .section { page-break-before: always; }
+    .section:first-of-type { page-break-before: avoid; }
+
+    /* ── Callouts ──────────────────────────────────────────── */
+    .callout {
+      border-left: 4px solid var(--blue);
+      background: var(--blue-lt);
+      padding: 0.6rem 0.9rem;
+      border-radius: 0 var(--radius) var(--radius) 0;
+      margin: 0.8rem 0;
+      font-size: 9.5pt;
+    }
+    .callout--tip   { border-color: var(--green); background: #f0fdf4; }
+    .callout--warn  { border-color: var(--amber); background: #fffbeb; }
+    .callout--label { font-weight: 700; display: block; margin-bottom: 0.2rem; font-size: 8.5pt; text-transform: uppercase; letter-spacing: 0.06em; color: var(--blue); }
+    .callout--tip  .callout--label  { color: var(--green); }
+    .callout--warn .callout--label  { color: var(--amber); }
+
+    /* ── Tabla de datos ────────────────────────────────────── */
+    table { width: 100%; border-collapse: collapse; font-size: 9.5pt; margin: 0.8rem 0; }
+    th { background: var(--blue-lt); color: var(--dark); font-weight: 700; text-align: left; padding: 6px 10px; border: 1px solid var(--border); }
+    td { padding: 5px 10px; border: 1px solid var(--border); vertical-align: top; }
+    tr:nth-child(even) td { background: var(--gray-lt); }
+
+    /* ── Badges de estado ──────────────────────────────────── */
+    .badge {
+      display: inline-block;
+      padding: 1px 7px;
+      border-radius: 20px;
+      font-size: 8.5pt;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .badge--green  { background: #dcfce7; color: #166534; }
+    .badge--amber  { background: #fef3c7; color: #92400e; }
+    .badge--red    { background: #fee2e2; color: #991b1b; }
+    .badge--blue   { background: #dbeafe; color: #1e40af; }
+    .badge--gray   { background: #f1f5f9; color: #475569; }
+
+    /* ── Steps ─────────────────────────────────────────────── */
+    .steps { list-style: none; margin: 0.6rem 0 1rem; padding: 0; counter-reset: step; }
+    .steps li { counter-increment: step; display: flex; gap: 0.75rem; margin-bottom: 0.6rem; align-items: flex-start; }
+    .steps li::before {
+      content: counter(step);
+      background: var(--blue);
+      color: #fff;
+      font-size: 8pt;
+      font-weight: 700;
+      min-width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+
+    /* ── Módulo chip ───────────────────────────────────────── */
+    .module-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      background: var(--blue-lt);
+      color: var(--blue);
+      border: 1px solid #bfdbfe;
+      border-radius: var(--radius);
+      padding: 2px 8px;
+      font-size: 9pt;
+      font-weight: 600;
+    }
+
+    /* ── Footer de página ──────────────────────────────────── */
+    @media print {
+      @page { margin: 1.8cm 1.5cm; size: A4; }
+      @page :first { margin-top: 0; }
+
+      .cover { min-height: 0; padding: 3cm 0 2cm; }
+      .section { page-break-before: always; }
+      .no-break { page-break-inside: avoid; }
+
+      /* pie de página */
+      @page {
+        @bottom-center {
+          content: "Refugios Malalcahuello · Manual de Usuario · " counter(page);
+          font-size: 8pt;
+          color: #94a3b8;
+        }
+      }
+    }
+
+    /* ── Utilidades ────────────────────────────────────────── */
+    .mt-1 { margin-top: 0.5rem; }
+    .mt-2 { margin-top: 1rem; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 0.8rem 0; }
+    @media print { .grid-2 { grid-template-columns: 1fr 1fr; } }
+    .card {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 0.75rem 1rem;
+      background: var(--gray-lt);
+    }
+    .card h4 { margin-top: 0; }
+    hr { border: none; border-top: 1px solid var(--border); margin: 1.5rem 0; }
+  </style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════════
+     PORTADA
+══════════════════════════════════════════════════ -->
+<div class="cover">
+  <div class="cover__logo">
+    <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="#1a56db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+      <polyline points="9 22 9 12 15 12 15 22"/>
+    </svg>
+    <div>
+      <span class="cover__logo-text">Refugios</span>
+      <span class="cover__logo-sub">Malalcahuello</span>
+    </div>
+  </div>
+
+  <div class="cover__rule"></div>
+  <h1 class="cover__title">Manual de Usuario</h1>
+  <p class="cover__subtitle">Sistema de Gestión de Arriendos · Panel Operativo</p>
+
+  <div class="cover__meta">
+    <span><strong>Versión</strong> UI v0.8.4</span>
+    <span><strong>Fecha</strong> Marzo 2026</span>
+    <span><strong>Desarrollado por</strong> Comunidad Virtual</span>
+    <span><strong>Ref.</strong> COT-2026-CV-AVA-003</span>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════
+     ÍNDICE
+══════════════════════════════════════════════════ -->
+<div class="toc">
+  <h2>Índice de Contenidos</h2>
+  <ul class="toc__list">
+    <li class="toc__item"><span class="toc__num">1</span><span class="toc__title">Introducción y acceso al sistema</span></li>
+    <li class="toc__item"><span class="toc__num">2</span><span class="toc__title">Navegación general</span></li>
+    <li class="toc__item"><span class="toc__num">3</span><span class="toc__title">Reservas</span></li>
+    <li class="toc__item"><span class="toc__num">4</span><span class="toc__title">Calendario</span></li>
+    <li class="toc__item"><span class="toc__num">5</span><span class="toc__title">Huéspedes</span></li>
+    <li class="toc__item"><span class="toc__num">6</span><span class="toc__title">Ventas y cobros</span></li>
+    <li class="toc__item"><span class="toc__num">7</span><span class="toc__title">Gastos</span></li>
+    <li class="toc__item"><span class="toc__num">8</span><span class="toc__title">Documentos (boletas y facturas)</span></li>
+    <li class="toc__item"><span class="toc__num">9</span><span class="toc__title">Cabañas</span></li>
+    <li class="toc__item"><span class="toc__num">10</span><span class="toc__title">Informes y exportaciones</span></li>
+    <li class="toc__item"><span class="toc__num">11</span><span class="toc__title">Glosario de estados</span></li>
+  </ul>
+</div>
+
+<!-- ══════════════════════════════════════════════════
+     1. INTRODUCCIÓN
+══════════════════════════════════════════════════ -->
+<div class="section">
+  <h2>1. Introducción y acceso al sistema</h2>
+
+  <p>El <strong>Panel Operativo de Refugios Malalcahuello</strong> es un sistema web diseñado para centralizar la gestión diaria de arriendos: reservas, cobros, gastos, huéspedes e informes. Funciona desde cualquier navegador moderno, en computador, tablet o celular.</p>
+
+  <h3>1.1 Iniciar sesión</h3>
+  <ol class="steps">
+    <li>Abrir el navegador e ingresar la URL del sistema (entregada por el equipo técnico).</li>
+    <li>Ingresar <strong>correo electrónico</strong> y <strong>contraseña</strong> en la pantalla de login.</li>
+    <li>Hacer clic en <strong>Iniciar sesión</strong>. El sistema cargará el panel principal automáticamente.</li>
+  </ol>
+
+  <div class="callout callout--warn">
+    <span class="callout--label">⚠ Importante</span>
+    La sesión dura 8 horas. Si el sistema muestra "Sesión expirada", vuelve a iniciar sesión. Los datos no se pierden.
+  </div>
+
+  <h3>1.2 Cerrar sesión</h3>
+  <p>Hacer clic en el ícono de usuario en la esquina superior derecha y seleccionar <strong>Cerrar sesión</strong>. Siempre cerrar sesión al terminar en computadores de uso compartido.</p>
+</div>
+
+<!-- ══════════════════════════════════════════════════
+     2. NAVEGACIÓN
+══════════════════════════════════════════════════ -->
+<div class="section">
+  <h2>2. Navegación general</h2>
+
+  <p>El panel tiene dos elementos de navegación principales:</p>
+
+  <div class="grid-2 no-break">
+    <div class="card">
+      <h4>Barra lateral (sidebar)</h4>
+      <p>Menú a la izquierda con acceso a todos los módulos. En celular, se abre con el ícono de menú (☰) en la parte superior.</p>
+    </div>
+    <div class="card">
+      <h4>Barra superior (topbar)</h4>
+      <p>Muestra el nombre de la sección activa, estado de conexión y acceso al perfil de usuario.</p>
+    </div>
+  </div>
+
+  <h3>2.1 Módulos disponibles</h3>
+  <table>
+    <thead>
+      <tr><th>Módulo</th><th>Descripción</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><strong>Inicio</strong></td><td>Panel principal con KPIs del día: ocupación, ingresos del mes, reservas activas.</td></tr>
+      <tr><td><strong>Disponibilidad</strong></td><td>Vista rápida de qué cabañas están disponibles en una fecha.</td></tr>
+      <tr><td><strong>Huéspedes</strong></td><td>Registro y búsqueda de huéspedes con historial de estadías.</td></tr>
+      <tr><td><strong>Reservas</strong></td><td>Listado completo de reservas con filtros y acciones.</td></tr>
+      <tr><td><strong>Cabañas</strong></td><td>Gestión de cabañas: información, precios e imágenes.</td></tr>
+      <tr><td><strong>Ventas</strong></td><td>Registro de cobros con desglose por período.</td></tr>
+      <tr><td><strong>Gastos</strong></td><td>Registro y categorización de gastos operativos.</td></tr>
+      <tr><td><strong>Documentos</strong></td><td>Registro de boletas y facturas emitidas.</td></tr>
+      <tr><td><strong>Informes Gastos</strong></td><td>Análisis de gastos con gráficos por categoría.</td></tr>
+      <tr><td><strong>Informes Reservas</strong></td><td>Análisis de reservas por canal y período.</td></tr>
+      <tr><td><strong>Informes Cabañas</strong></td><td>Ocupación e ingresos por cabaña.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ══════════════════════════════════════════════════
+     3. RESERVAS
+══════════════════════════════════════════════════ -->
+<div class="section">
+  <h2>3. Reservas</h2>
+
+  <h3>3.1 Crear una reserva</h3>
+  <ol class="steps">
+    <li>Ir al módulo <strong>Reservas</strong> desde el menú lateral.</li>
+    <li>Hacer clic en <strong>Nueva reserva</strong>.</li>
+    <li>Completar el formulario: RUT del huésped (el sistema busca si ya existe), fechas de entrada y salida, número de huéspedes, cabaña asignada, canal de reserva y monto total.</li>
+    <li>Hacer clic en <strong>Guardar reserva</strong>.</li>
+  </ol>
+
+  <div class="callout callout--tip">
+    <span class="callout--label">💡 Consejo</span>
+    Si el huésped no tiene RUT o es extranjero, igual se puede registrar ingresando su nombre manualmente cuando el sistema lo solicite.
+  </div>
+
+  <h3>3.2 Estados de una reserva</h3>
+  <table class="no-break">
+    <thead>
+      <tr><th>Estado</th><th>Significado</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><span class="badge badge--amber">Pendiente</span></td><td>Reserva ingresada, aún no confirmada ni pagada.</td></tr>
+      <tr><td><span class="badge badge--blue">Confirmada</span></td><td>Reserva activa y confirmada con el huésped.</td></tr>
+      <tr><td><span class="badge badge--red">Cancelada</span></td><td>Reserva anulada. Queda registrada en el historial.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>3.3 Estado de pago</h3>
+  <table class="no-break">
+    <thead>
+      <tr><th>Estado</th><th>Significado</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><span class="badge badge--red">Pendiente</span></td><td>Sin pagos registrados para esta reserva.</td></tr>
+      <tr><td><span class="badge badge--amber">Parcial</span></td><td>Se ha abonado un monto, pero queda saldo por cobrar.</td></tr>
+      <tr><td><span class="badge badge--green">Pagado</span></td><td>El monto total fue cubierto con uno o más cobros.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>3.4 Canales de reserva</h3>
+  <p>Al crear una reserva, se indica el origen:</p>
+  <ul>
+    <li><strong>Sitio web propio</strong></li>
+    <li><strong>Airbnb</strong></li>
+    <li><strong>Booking.com</strong></li>
+    <li><strong>Teléfono / llamada directa</strong></li>
+    <li><strong>Mostrador</strong> (walk-in)</li>
+    <li><strong>Otro</strong></li>
+  </ul>
+
+  <h3>3.5 Cambiar estado de una reserva</h3>
+  <ol class="steps">
+    <li>En la lista de reservas, hacer clic en <strong>···</strong> (opciones) de la fila correspondiente.</li>
+    <li>Seleccionar el nuevo estado: <em>Confirmar</em>, <em>Cancelar</em>, o <em>Liberar cabaña</em> al hacer checkout.</li>
+  </ol>
+</div>
+
+<!-- ══════════════════════════════════════════════════
+     4. CALENDARIO
+══════════════════════════════════════════════════ -->
+<div class="section">
+  <h2>4. Calendario</h2>
+
+  <p>El calendario muestra la ocupación de cada cabaña de forma visual, mes a mes. Cada cabaña tiene su propio color para facilitar la lectura.</p>
+
+  <h3>4.1 Leer el calendario</h3>
+  <ul>
+    <li>Cada <strong>bloque de color</strong> representa una reserva activa en esa cabaña.</li>
+    <li>El texto dentro del bloque muestra el nombre del huésped.</li>
+    <li>Los días sin color están disponibles.</li>
+  </ul>
+
+  <h3>4.2 Navegar entre meses</h3>
+  <p>Usar las flechas <strong>‹</strong> y <strong>›</strong> en la parte superior del calendario para avanzar o retroceder un mes.</p>
+
+  <div class="callout">
+    <span class="callout--label">ℹ Nota</span>
+    El calendario es de solo lectura. Para crear o modificar reservas, usar el módulo <strong>Reservas</strong>.
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════
+     5. HUÉSPEDES
+══════════════════════════════════════════════════ -->
+<div class="section">
+  <h2>5. Huéspedes</h2>
+
+  <h3>5.1 Registrar un huésped</h3>
+  <p>Los huéspedes se registran automáticamente al crear una reserva. El sistema los identifica por <strong>RUT</strong> (o pasaporte para extranjeros). Si el huésped ya existe, sus datos se reutilizan sin duplicar el registro.</p>
+
+  <h3>5.2 Buscar un huésped</h3>
+  <ol class="steps">
+    <li>Ir al módulo <strong>Huéspedes</strong>.</li>
+    <li>Usar el campo de búsqueda para filtrar por nombre o RUT.</li>
+    <li>La lista muestra el historial de reservas y el estado de deuda de cada huésped.</li>
+  </ol>
+
+  <h3>5.3 Filtros disponibles</h3>
+  <ul>
+    <li><strong>Por nombre:</strong> búsqueda en tiempo real mientras se escribe.</li>
+    <li><strong>Por deuda:</strong> filtrar solo huéspedes con saldo pendiente o parcial.</li>
+  </ul>
+
+  <h3>5.4 Editar datos de un huésped</h3>
+  <p>Hacer clic en el nombre del huésped en la lista para editar su información de contacto (nombre, email, teléfono).</p>
+</div>
+
+<!-- ══════════════════════════════════════════════════
+     6. VENTAS Y COBROS
+══════════════════════════════════════════════════ -->
+<div class="section">
+  <h2>6. Ventas y cobros</h2>
+
+  <p>El módulo <strong>Ventas</strong> registra cada cobro realizado: puede estar asociado a una reserva o ser una venta independiente.</p>
+
+  <h3>6.1 Registrar un cobro</h3>
+  <ol class="steps">
+    <li>Ir al módulo <strong>Ventas</strong>.</li>
+    <li>Hacer clic en <strong>Registrar venta</strong>.</li>
+    <li>Completar: fecha, categoría, medio de pago, monto.</li>
+    <li>Si el cobro corresponde a una reserva, ingresar el <strong>número de reserva</strong> (opcional). El sistema actualizará automáticamente el saldo pendiente.</li>
+    <li>Hacer clic en <strong>Guardar venta</strong>.</li>
+  </ol>
+
+  <div class="callout callout--tip">
+    <span class="callout--label">💡 Cobros parciales</span>
+    Si el huésped paga en cuotas, se pueden registrar múltiples ventas asociadas a la misma reserva. El sistema acumula los pagos y actualiza el estado de deuda (Parcial → Pagado) automáticamente.
+  </div>
+
+  <h3>6.2 Medios de pago disponibles</h3>
+  <div class="grid-2 no-break">
+    <ul>
+      <li>Efectivo</li>
+      <li>Transferencia bancaria</li>
+      <li>Tarjeta de crédito/débito</li>
+    </ul>
+    <ul>
+      <li>MercadoPago</li>
+      <li>Otro (describir en categoría)</li>
+    </ul>
+  </div>
+
+  <h3>6.3 Filtrar y exportar</h3>
+  <p>En el módulo Ventas se puede filtrar por período (desde/hasta) y exportar a <strong>CSV</strong> para procesar en Excel.</p>
+</div>
+
+<!-- ══════════════════════════════════════════════════
+     7. GASTOS
+══════════════════════════════════════════════════ -->
+<div class="section">
+  <h2>7. Gastos</h2>
+
+  <h3>7.1 Registrar un gasto</h3>
+  <ol class="steps">
+    <li>Ir al módulo <strong>Gastos</strong>.</li>
+    <li>Hacer clic en <strong>Nuevo gasto</strong>.</li>
+    <li>Completar: fecha, descripción, categoría, monto y medio de pago.</li>
+    <li>Hacer clic en <strong>Guardar gasto</strong>.</li>
+  </ol>
+
+  <h3>7.2 Categorías de gasto</h3>
+  <p>Clasificar los gastos por categoría permite ver el análisis en los <strong>Informes de Gastos</strong>. Algunas categorías comunes:</p>
+  <ul>
+    <li>Mantención y reparaciones</li>
+    <li>Servicios básicos (agua, luz, gas)</li>
+    <li>Limpieza y suministros</li>
+    <li>Personal</li>
+    <li>Publicidad</li>
+    <li>Otros</li>
+  </ul>
+
+  <h3>7.3 Exportar gastos</h3>
+  <p>Usar el botón <strong>Exportar CSV</strong> para descargar los gastos del período filtrado en formato Excel.</p>
+</div>
+
+<!-- ══════════════════════════════════════════════════
+     8. DOCUMENTOS
+══════════════════════════════════════════════════ -->
+<div class="section">
+  <h2>8. Documentos (boletas y facturas)</h2>
+
+  <p>El módulo <strong>Documentos</strong> lleva el registro de boletas y facturas emitidas, asociadas a ventas o reservas.</p>
+
+  <h3>8.1 Registrar un documento</h3>
+  <ol class="steps">
+    <li>Ir al módulo <strong>Documentos</strong>.</li>
+    <li>Hacer clic en <strong>Nuevo documento</strong>.</li>
+    <li>Seleccionar el tipo: <strong>Boleta</strong> o <strong>Factura</strong>.</li>
+    <li>Ingresar el número de documento, monto y asociarlo a la venta o reserva correspondiente.</li>
+    <li>Guardar.</li>
+  </ol>
+
+  <h3>8.2 Estados de documento</h3>
+  <table class="no-break">
+    <thead>
+      <tr><th>Estado</th><th>Significado</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><span class="badge badge--green">Emitido</span></td><td>Documento emitido y vigente.</td></tr>
+      <tr><td><span class="badge badge--red">Anulado</span></td><td>Documento anulado. Queda en el historial para trazabilidad.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout callout--warn">
+    <span class="callout--label">⚠ Nota</span>
+    Este módulo registra la emisión de documentos de forma manual. La integración con el SII (facturación electrónica) es una funcionalidad futura cotizable por separado.
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════
+     9. CABAÑAS
+══════════════════════════════════════════════════ -->
+<div class="section">
+  <h2>9. Cabañas</h2>
+
+  <p>El módulo <strong>Cabañas</strong> permite configurar la información de cada unidad disponible para arriendo.</p>
+
+  <h3>9.1 Información configurable por cabaña</h3>
+  <table>
+    <thead>
+      <tr><th>Campo</th><th>Descripción</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Nombre</td><td>Nombre de la cabaña tal como aparece en el sistema.</td></tr>
+      <tr><td>Código corto</td><td>Abreviación para el calendario y listados.</td></tr>
+      <tr><td>Capacidad</td><td>Número máximo de huéspedes.</td></tr>
+      <tr><td>Tarifa noche</td><td>Precio base por noche en CLP.</td></tr>
+      <tr><td>Color</td><td>Color de identificación en el calendario.</td></tr>
+      <tr><td>Amenidades</td><td>Servicios disponibles: piscina, desayuno, WiFi, estacionamiento, etc.</td></tr>
+      <tr><td>Imágenes</td><td>Fotos de la cabaña (hasta 10 imágenes).</td></tr>
+    </tbody>
+  </table>
+
+  <h3>9.2 Liberar una cabaña</h3>
+  <p>Cuando el huésped hace <em>checkout</em>, usar el botón <strong>Liberar cabaña</strong> en la reserva activa. Esto actualiza la disponibilidad en tiempo real.</p>
+</div>
+
+<!-- ══════════════════════════════════════════════════
+     10. INFORMES
+══════════════════════════════════════════════════ -->
+<div class="section">
+  <h2>10. Informes y exportaciones</h2>
+
+  <p>El sistema cuenta con cuatro secciones de informes accesibles desde el menú lateral:</p>
+
+  <table>
+    <thead>
+      <tr><th>Informe</th><th>Contenido</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><strong>Ventas · Informes</strong></td><td>Gráficos de ingresos por categoría y listado de ventas del período.</td></tr>
+      <tr><td><strong>Análisis de Gastos</strong></td><td>Desglose por categoría con gráfico de torta y tabla detallada.</td></tr>
+      <tr><td><strong>Análisis de Reservas</strong></td><td>Reservas por canal, ocupación y tendencias del período.</td></tr>
+      <tr><td><strong>Análisis de Cabañas</strong></td><td>Ingresos y ocupación por cabaña en el período seleccionado.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>10.1 Exportar a PDF</h3>
+  <ol class="steps">
+    <li>Navegar al informe que se desea exportar.</li>
+    <li>Seleccionar el período (mes o año) con los filtros.</li>
+    <li>Hacer clic en <strong>Exportar PDF</strong>.</li>
+    <li>El navegador abrirá el diálogo de impresión. Seleccionar <em>"Guardar como PDF"</em> como destino.</li>
+  </ol>
+
+  <h3>10.2 Exportar a Excel (CSV)</h3>
+  <ol class="steps">
+    <li>En los módulos Ventas o Gastos, hacer clic en <strong>Exportar CSV</strong>.</li>
+    <li>El archivo se descargará automáticamente y puede abrirse en Excel o Google Sheets.</li>
+  </ol>
+
+  <div class="callout callout--tip">
+    <span class="callout--label">💡 Consejo</span>
+    Para el cierre mensual, exportar el PDF de cada informe y el CSV de ventas y gastos. Esto entrega un respaldo completo del período.
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════
+     11. GLOSARIO
+══════════════════════════════════════════════════ -->
+<div class="section">
+  <h2>11. Glosario de estados</h2>
+
+  <h3>Estados de reserva</h3>
+  <table class="no-break">
+    <thead><tr><th>Estado</th><th>Significado</th></tr></thead>
+    <tbody>
+      <tr><td><span class="badge badge--amber">Pendiente</span></td><td>Ingresada pero sin confirmar.</td></tr>
+      <tr><td><span class="badge badge--blue">Confirmada</span></td><td>Activa y acordada con el huésped.</td></tr>
+      <tr><td><span class="badge badge--red">Cancelada</span></td><td>Anulada. Permanece en el historial.</td></tr>
+    </tbody>
+  </table>
+
+  <h3 class="mt-2">Estados de pago</h3>
+  <table class="no-break">
+    <thead><tr><th>Estado</th><th>Significado</th></tr></thead>
+    <tbody>
+      <tr><td><span class="badge badge--red">Pendiente</span></td><td>Sin cobros registrados.</td></tr>
+      <tr><td><span class="badge badge--amber">Parcial</span></td><td>Cobro parcial registrado. Queda saldo.</td></tr>
+      <tr><td><span class="badge badge--green">Pagado</span></td><td>Monto total cubierto.</td></tr>
+    </tbody>
+  </table>
+
+  <h3 class="mt-2">Estados de documento</h3>
+  <table class="no-break">
+    <thead><tr><th>Estado</th><th>Significado</th></tr></thead>
+    <tbody>
+      <tr><td><span class="badge badge--green">Emitido</span></td><td>Boleta o factura vigente.</td></tr>
+      <tr><td><span class="badge badge--red">Anulado</span></td><td>Documento anulado.</td></tr>
+    </tbody>
+  </table>
+
+  <hr />
+
+  <p style="font-size:9pt; color:#64748b; text-align:center; margin-top:1.5rem;">
+    Refugios Malalcahuello · Sistema de Gestión de Arriendos · UI v0.8.4<br>
+    Desarrollado por Comunidad Virtual · COT-2026-CV-AVA-003<br>
+    Para soporte técnico contactar al equipo de desarrollo.
+  </p>
+</div>
+
+</body>
+</html>

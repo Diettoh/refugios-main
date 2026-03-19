@@ -1,0 +1,30 @@
+VENTAS 2026
+NOMBRE 	R / C 	T / P / A / B 	PAX 	PAX Ad 	NOCHES 	PRECIO POR NOCHE 	SUPLEMENTO LIMPIEZA 	TOTAL POR NOCHE 	TOTAL Estadía 	UTILIDAD 	ABONOS 	BOLETAS
+1 Nicolas Sanchez 	R 	P 	3 	0 	4 	90.000 	30.000 	90.000 	390.000 -$ 	384.540- 	X
+2 Cristobal Muhr 	R 	T 	3 	0 	3 	60.000 	60.000 	180.000 -$ 	180.000- abono 120.000 	SII 	debe 60.000
+3 	0 	0 	0 -$ 	-- 	SII
+4 Natalia Ureta 	R 	T 	4 	0 	3 	110.000 	110.000 	330.000 -$ 	330.000- abono 165.000 	SII
+5 Felipe Garcia 	C 	B 	0 	0 	0 -$ 	720.000- 	X
+6 Luis Reyes 	R 	T 	2 	0 	3 	90.000 	90.000 	270.000 -$ 	270.000- abono 135.000 	SII
+7 Eva Piccozzi 	R 	P 	3 	0 	5 	120.000 	30.000 	120.000 	630.000 -$ 	621.180- 	X
+8 Juan Videla 	R 	A 	2 	0 	2 	90.000 	90.000 	180.000 -$ 	174.600- 	SII
+9 Tomas Correa 	R 	A 	2 	0 	2 	90.000 	90.000 	180.000 -$ 	174.600-
+10 Camila Muñoz 	R 	T 	3 	0 	6 	100.000 	100.000 	600.000 -$ 	600.000- abono 300.000 	factura
+11 Rodrigo Espinoza 	R 	T 	2 	0 	5 	90.000 	90.000 	450.000 -$ 	450.000- 	factura
+12 Paulina Cabezas 	R 	T 	2 	0 	2 	72.900 	72.900 	145.800 -$ 	145.800- 	SII
+13 Marcela Rodriguez 	R 	T 	2 	0 	2 	90.000 	90.000 	180.000 -$ 	180.000- 	SII
+14 Alejandra Maturana 	R 	T 	2 	0 	3 	90.000 	90.000 	270.000 -$ 	270.000- 	X
+15 Ariana Sepulveda 	R 	T 	2 	0 	6 	73.500 	73.500 	441.000 -$ 	441.000- booking
+16 Lourdes Velez 	R 	T 	2 	0 	4 	72.000 	72.000 	288.000 -$ 	288.000- booking
+17 Gabriela Soto 	R 	A 	2 	0 	2 	90.000 	90.000 	180.000 -$ 	174.600- 	SII
+18 Valentina Riquelme 	R 	A 	2 	0 	2 	90.000 	90.000 	180.000 -$ 	174.600- 	SII
+19 Russel King 	C 	A 	4 	0 	3 	210.000 	40.000 	210.000 	670.000 -$ 	649.900- 	SII
+20 Andres Goycolea 	C 	A 	5 	0 	5 	210.000 	40.000 	210.000 	1.090.000 -$ 	1.057.300- 	SII
+21 Javiera Garrido 	R 	A 	2 	0 	3 	90.000 	90.000 	270.000 -$ 	261.900- 	SII
+22 	0 	0 	0 -$ 	--
+23 	0 	0 	0 -$ 	--
+24 	0 	0 -$ 	--
+TOTAL 	-$ 	7.548.020-
+CASA 	REFUGIOS
+TOTAL
+NOCHES 	8 	57
