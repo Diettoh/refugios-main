@@ -9,11 +9,14 @@ if (!process.env.DATABASE_URL) {
   process.exit(1);
 }
 
-const connectionString = process.env.DATABASE_URL;
-const maskedUrl = connectionString.replace(/:([^:@]+)@/, ":****@");
+const connectionString = process.env.DATABASE_URL.trim();
+const maskedUrl = connectionString.includes("@") 
+  ? connectionString.replace(/:([^:@]+)@/, ":****@")
+  : "URL malformada (no contiene @)";
+
 console.log(`Conectando a DB: ${maskedUrl}`);
 
-const needsSsl = connectionString.includes("sslmode=require");
+const needsSsl = connectionString.includes("sslmode=require") || connectionString.includes("render.com");
 const client = new Client({
   connectionString,
   ...(needsSsl ? { ssl: { rejectUnauthorized: false } } : {})
