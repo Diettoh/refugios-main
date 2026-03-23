@@ -814,7 +814,12 @@
         <form id="reservation-form" class="modal__form">
           <input type="hidden" name="guest_id" />
           <label class="form-field">
-            <span>RUT huésped</span>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <span>RUT huésped</span>
+              <label style="font-size: 0.8em; font-weight: normal; display: flex; align-items: center; gap: 4px; cursor: pointer;">
+                <input type="checkbox" id="no-rut-checkbox" /> Sin RUT / Extranjero
+              </label>
+            </div>
             <input type="text" name="guest_document_id" placeholder="12345678-9" required />
           </label>
           <p class="form-helper" id="reservation-guest-status">Ingresa RUT para buscar huésped.</p>

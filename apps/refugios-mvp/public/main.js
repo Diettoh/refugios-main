@@ -1995,6 +1995,22 @@ function bindReservationGuestLookup() {
     if (!rut || rut.length < 7) return;
     inputTimer = setTimeout(runLookup, 350);
   });
+
+  const noRutCheckbox = form.querySelector('#no-rut-checkbox');
+  if (noRutCheckbox) {
+    noRutCheckbox.addEventListener("change", (e) => {
+      const isNoRut = e.target.checked;
+      documentInput.disabled = isNoRut;
+      documentInput.required = !isNoRut;
+      if (isNoRut) {
+        documentInput.value = "";
+        clearGuest();
+        setReservationGuestStatus("Modo sin RUT activado. Ingresa el nombre para crearlo.");
+      } else {
+        setReservationGuestStatus("Ingresa RUT para buscar huésped.");
+      }
+    });
+  }
 }
 
 function bindReservationForm() {
@@ -2004,10 +2020,13 @@ function bindReservationForm() {
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
     const payload = normalize(toPayload(form));
-    const rut = normalizeDocumentId(payload.guest_document_id);
+    const noRutCheckbox = form.querySelector('#no-rut-checkbox');
+    const isNoRut = noRutCheckbox && noRutCheckbox.checked;
+
+    const rut = isNoRut ? null : normalizeDocumentId(payload.guest_document_id);
     payload.guest_document_id = rut;
 
-    if (!rut) {
+    if (!rut && !isNoRut) {
       setStatus("Debes ingresar RUT del huésped", "error");
       setReservationGuestStatus("Debes ingresar RUT válido.", "error");
       return;
