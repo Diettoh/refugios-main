@@ -72,7 +72,7 @@ router.get("/analytics", async (req, res, next) => {
            SELECT to_char(m.m, 'YYYY-MM') AS month,
                   COALESCE(SUM(
                     CASE WHEN r.id IS NOT NULL
-                      THEN GREATEST(0, LEAST(r.check_out, (m.m + interval '1 month' - interval '1 day')::date) - GREATEST(r.check_in, m.m) + 1)
+                      THEN GREATEST(0, LEAST(r.check_out, (m.m + interval '1 month' - interval '1 day')::date) - GREATEST(r.check_in, m.m))
                       ELSE 0
                     END
                   ), 0)::int AS noches_totales
