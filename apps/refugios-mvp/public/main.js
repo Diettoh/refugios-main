@@ -1688,7 +1688,6 @@ async function loadAll() {
       </div>
       <div class="record-actions">
         <button type="button" class="btn btn--sm btn--ghost btn-edit-reservation" data-reservation-id="${row.id}">Editar</button>
-        ${row.debt_status !== "paid" ? `<button class="btn btn--sm btn--accent" data-cobrar-id="${row.id}" data-cobrar-amount="${row.amount_due || 0}" data-cobrar-guest="${row.guest_name || ""}">Cobrar</button>` : ""}
         ${deleteButton("reservations", row.id)}
       </div>
     </li>`);
@@ -2465,16 +2464,6 @@ function bindReservationEditButtons() {
 }
 
 function bindDeleteButtons() {
-  // Delegación: botones "Cobrar" en reservas
-  document.body.addEventListener("click", (event) => {
-    const btn = event.target.closest("[data-cobrar-id]");
-    if (!btn) return;
-    const id = Number(btn.dataset.cobrarId);
-    const amount = Number(btn.dataset.cobrarAmount || 0);
-    const guest = btn.dataset.cobrarGuest || "";
-    openSaleModalForReservation(id, amount, guest);
-  });
-
   document.body.addEventListener("click", async (event) => {
     const button = event.target.closest(".btn-delete");
     if (!button) return;
