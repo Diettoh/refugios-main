@@ -77,7 +77,7 @@ router.get("/", async (req, res, next) => {
       const fromParam = addParam(from);
       const toParam = addParam(to);
       where.push(`(
-        (r.id IS NOT NULL AND r.check_in <= ${toParam}::date AND r.check_out >= ${fromParam}::date)
+        (r.id IS NOT NULL AND r.check_out >= ${fromParam}::date AND r.check_out <= ${toParam}::date)
         OR
         (r.id IS NULL AND s.sale_date >= ${fromParam}::date AND s.sale_date <= ${toParam}::date)
       )`);
@@ -91,7 +91,7 @@ router.get("/", async (req, res, next) => {
     } else if (to) {
       const toParam = addParam(to);
       where.push(`(
-        (r.id IS NOT NULL AND r.check_in <= ${toParam}::date)
+        (r.id IS NOT NULL AND r.check_out <= ${toParam}::date)
         OR
         (r.id IS NULL AND s.sale_date <= ${toParam}::date)
       )`);
@@ -165,6 +165,7 @@ router.get("/", async (req, res, next) => {
          s.amount AS raw_amount,
          s.payment_method,
          s.sale_date,
+         COALESCE(r.check_out, s.sale_date) AS effective_period_date,
          s.description,
          g.full_name AS guest_name,
          g.document_id AS guest_document,
@@ -186,7 +187,7 @@ router.get("/", async (req, res, next) => {
        LEFT JOIN guests g ON g.id = r.guest_id
        LEFT JOIN cabins c ON c.id = r.cabin_id
        ${where.length > 0 ? `WHERE ${where.join(" AND ")}` : ""}
-       ORDER BY s.sale_date DESC, s.id DESC`,
+       ORDER BY COALESCE(r.check_out, s.sale_date) DESC, s.id DESC`,
       params
     );
     return res.json(result.rows);

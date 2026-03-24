@@ -647,13 +647,10 @@ function filterRows(rows, dateField) {
 }
 
 function saleMatchesPeriod(row, from, to) {
-  const hasReservationPeriod = Boolean(row?.reservation_check_in && row?.reservation_check_out);
-  if (hasReservationPeriod) {
-    const checkIn = toDateKey(row.reservation_check_in);
-    const checkOut = toDateKey(row.reservation_check_out);
-    if (!checkIn || !checkOut) return false;
-    if (from && checkOut < from) return false;
-    if (to && checkIn > to) return false;
+  const effectiveDate = toDateKey(row?.reservation_check_out || row?.effective_period_date || row?.sale_date);
+  if (effectiveDate) {
+    if (from && effectiveDate < from) return false;
+    if (to && effectiveDate > to) return false;
     return true;
   }
   return inDateRange(row?.sale_date, from, to);
@@ -3292,7 +3289,7 @@ function renderMonthlyTables(from, to, sales, expenses) {
 
         return `
     <tr>
-      <td>${formatDate(row.sale_date)}</td>
+      <td>${formatDate(row.effective_period_date || row.reservation_check_out || row.sale_date)}</td>
       <td>
         <div><strong>${row.guest_name || "-"}</strong></div>
         <div style="font-size:0.8em; color:gray;">${rut}</div>
