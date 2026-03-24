@@ -812,6 +812,7 @@
           <button class="modal__close" data-modal-close aria-label="Cerrar">&times;</button>
         </div>
         <form id="reservation-form" class="modal__form">
+          <input type="hidden" name="reservation_id" />
           <input type="hidden" name="guest_id" />
           <label class="form-field">
             <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -909,6 +910,7 @@
             <label class="form-field">
               <span>Monto total pactado (CLP)</span>
               <input type="number" name="total_amount" min="0" inputmode="numeric" required />
+              <p class="form-helper" id="reservation-total-suggestion">Completa noches y tarifa para sugerir un total.</p>
             </label>
             <label class="form-field">
               <span>Notas de la reserva (opcional)</span>

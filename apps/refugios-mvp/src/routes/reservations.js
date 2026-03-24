@@ -680,6 +680,7 @@ router.patch("/:id", async (req, res, next) => {
     "season_type",
     "reservation_document_type",
     "notes",
+    "additional_charge",
     "cabin_id"
   ];
 
@@ -703,7 +704,7 @@ router.patch("/:id", async (req, res, next) => {
         }
       }
 
-      if (field === "total_amount" || field === "nightly_rate" || field === "cleaning_supplement") {
+      if (field === "total_amount" || field === "nightly_rate" || field === "cleaning_supplement" || field === "additional_charge") {
         if (value === "" || value === null) value = null;
         if (value !== null) {
           const n = Number(value);

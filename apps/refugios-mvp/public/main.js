@@ -51,6 +51,16 @@ function formatChannelPaymentLabel(source, paymentMethod) {
   return sourceLabels[src] || paymentLabels[pay] || source || paymentMethod || "-";
 }
 
+function getChannelPaymentValue(source, paymentMethod) {
+  const src = String(source || "").toLowerCase();
+  const pay = String(paymentMethod || "").toLowerCase();
+  if (src === "direct" && pay === "transfer") return "transfer";
+  if (src === "web") return "web";
+  if (src === "airbnb") return "airbnb";
+  if (src === "booking") return "booking";
+  return "";
+}
+
 const EXPENSE_CATEGORY_PRESETS = [
   "Gas",
   "Aseo Caro",
@@ -341,6 +351,9 @@ function setupSectionModals() {
           const monthInput = form.querySelector('[name="expense_month"]');
           if (monthInput) monthInput.value = new Date().toISOString().slice(0, 7);
         }
+      }
+      if (modalId === "reservation-modal") {
+        resetReservationForm();
       }
       openModal(modal);
       if (modalId === "reservation-modal") {
@@ -1638,6 +1651,7 @@ async function loadAll() {
         ${chip(debtLabel(row.debt_status, row.amount_due), debtClass(row.debt_status))}
       </div>
       <div class="record-actions">
+        <button type="button" class="btn btn--sm btn--ghost btn-edit-reservation" data-reservation-id="${row.id}">Editar</button>
         ${row.debt_status !== "paid" ? `<button class="btn btn--sm btn--accent" data-cobrar-id="${row.id}" data-cobrar-amount="${row.amount_due || 0}" data-cobrar-guest="${row.guest_name || ""}">Cobrar</button>` : ""}
         ${deleteButton("reservations", row.id)}
       </div>
@@ -2018,6 +2032,97 @@ function bindReservationGuestLookup() {
   }
 }
 
+function resetReservationForm() {
+  const modal = document.getElementById("reservation-modal");
+  const form = document.getElementById("reservation-form");
+  if (!modal || !form) return;
+
+  form.reset();
+  const title = modal.querySelector(".modal__header h3");
+  if (title) title.textContent = "Nueva reserva";
+
+  const submitButton = form.querySelector('button[type="submit"]');
+  if (submitButton) submitButton.textContent = "Guardar reserva";
+
+  const reservationIdInput = form.querySelector('input[name="reservation_id"]');
+  const guestIdInput = form.querySelector('input[name="guest_id"]');
+  if (reservationIdInput) reservationIdInput.value = "";
+  if (guestIdInput) guestIdInput.value = "";
+
+  const noRutCheckbox = form.querySelector("#no-rut-checkbox");
+  const documentInput = form.querySelector('input[name="guest_document_id"]');
+  if (noRutCheckbox) noRutCheckbox.checked = false;
+  if (documentInput) {
+    documentInput.disabled = false;
+    documentInput.required = true;
+  }
+
+  setReservationGuestStatus("Ingresa RUT para buscar huésped.");
+}
+
+function openReservationEditor(reservationId) {
+  const reservation = (state.reservations || []).find((row) => Number(row.id) === Number(reservationId));
+  if (!reservation) {
+    setStatus("No se pudo cargar la reserva para editar.", "error");
+    return;
+  }
+
+  const modal = document.getElementById("reservation-modal");
+  const form = document.getElementById("reservation-form");
+  if (!modal || !form) return;
+
+  resetReservationForm();
+
+  const guest = (state.guests || []).find((row) => Number(row.id) === Number(reservation.guest_id)) || null;
+  const setFieldValue = (selector, value) => {
+    const field = form.querySelector(selector);
+    if (field) field.value = value ?? "";
+  };
+
+  const title = modal.querySelector(".modal__header h3");
+  if (title) title.textContent = `Editar reserva #${reservation.id}`;
+
+  const submitButton = form.querySelector('button[type="submit"]');
+  if (submitButton) submitButton.textContent = "Guardar cambios";
+
+  setFieldValue('[name="reservation_id"]', String(reservation.id));
+  setFieldValue('[name="guest_id"]', String(reservation.guest_id || ""));
+  setFieldValue('[name="guest_document_id"]', reservation.guest_document || "");
+  setFieldValue('[name="guest_full_name"]', reservation.guest_name || guest?.full_name || "");
+  setFieldValue('[name="guest_email"]', guest?.email || "");
+  setFieldValue('[name="guest_phone"]', guest?.phone || "");
+  setFieldValue('[name="channel_payment"]', getChannelPaymentValue(reservation.source, reservation.payment_method));
+  setFieldValue('[name="cabin_id"]', String(reservation.cabin_id || ""));
+  setFieldValue('[name="nightly_rate"]', String(reservation.nightly_rate ?? ""));
+  setFieldValue('[name="check_in"]', toDateKey(reservation.check_in) || "");
+  setFieldValue('[name="check_out"]', toDateKey(reservation.check_out) || "");
+  setFieldValue('[name="check_in_time"]', reservation.check_in_time ? String(reservation.check_in_time).slice(0, 5) : "");
+  setFieldValue('[name="checkout_time"]', reservation.checkout_time ? String(reservation.checkout_time).slice(0, 5) : "");
+  setFieldValue('[name="guests_count"]', String(reservation.guests_count || 1));
+  setFieldValue('[name="nights"]', String(reservation.nights || ""));
+  setFieldValue('[name="additional_charge"]', String(reservation.additional_charge || 0));
+  setFieldValue('[name="tax_document_type"]', guest?.tax_document_type || "sii");
+  setFieldValue('[name="total_amount"]', String(reservation.total_amount || 0));
+  setFieldValue('[name="notes"]', reservation.notes || "");
+
+  const noRutCheckbox = form.querySelector("#no-rut-checkbox");
+  const documentInput = form.querySelector('input[name="guest_document_id"]');
+  const isNoRut = !String(reservation.guest_document || "").trim();
+  if (noRutCheckbox) noRutCheckbox.checked = isNoRut;
+  if (documentInput) {
+    documentInput.disabled = isNoRut;
+    documentInput.required = !isNoRut;
+  }
+
+  setReservationGuestStatus(`Editando reserva de ${reservation.guest_name || "huésped"} (#${reservation.id}).`, "ok");
+  openModal(modal);
+
+  setTimeout(() => {
+    const cabinSelect = document.getElementById("reservation-cabin");
+    if (cabinSelect) cabinSelect.dispatchEvent(new Event("change"));
+  }, 0);
+}
+
 function bindReservationForm() {
   const form = document.getElementById("reservation-form");
   if (!form) return;
@@ -2026,6 +2131,9 @@ function bindReservationForm() {
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
     const payload = normalize(toPayload(form));
+    const reservationId = Number(payload.reservation_id || 0);
+    const isEditing = Number.isInteger(reservationId) && reservationId > 0;
+    delete payload.reservation_id;
     const noRutCheckbox = form.querySelector('#no-rut-checkbox');
     const isNoRut = noRutCheckbox && noRutCheckbox.checked;
 
@@ -2059,6 +2167,9 @@ function bindReservationForm() {
     try {
       let guestId = Number(payload.guest_id);
       if (!Number.isInteger(guestId) || guestId <= 0) {
+        if (isEditing) {
+          throw new Error("La reserva no tiene un huésped válido para editar.");
+        }
         if (!payload.guest_full_name) {
           throw new Error("RUT no encontrado. Ingresa nombre para crear huésped.");
         }
@@ -2106,12 +2217,22 @@ function bindReservationForm() {
         throw new Error("Selecciona un canal / medio de pago valido.");
       }
 
-      await api("/api/reservations", { method: "POST", body: JSON.stringify(reservationPayload) });
+      if (isEditing) {
+        delete reservationPayload.guest_id;
+        delete reservationPayload.guest_name;
+        delete reservationPayload.guest_document;
+        delete reservationPayload.guest_email;
+        delete reservationPayload.guest_phone;
+        delete reservationPayload.tax_document_type;
+        await api(`/api/reservations/${reservationId}`, { method: "PATCH", body: JSON.stringify(reservationPayload) });
+      } else {
+        await api("/api/reservations", { method: "POST", body: JSON.stringify(reservationPayload) });
+      }
       form.reset();
       setReservationGuestStatus("Ingresa RUT para buscar huésped.");
       await loadAll();
       closeModal(form.closest(".form-modal"));
-      setStatus("Reserva guardada", "ok");
+      setStatus(isEditing ? "Reserva actualizada" : "Reserva guardada", "ok");
     } catch (error) {
       setStatus(error.message, "error");
       setReservationGuestStatus(error.message, "error");
@@ -2125,7 +2246,39 @@ function bindReservationPricing() {
   const checkInInput = form.querySelector('input[name="check_in"]');
   const checkOutInput = form.querySelector('input[name="check_out"]');
   const nightsInput = document.getElementById("reservation-nights");
-  if (!checkInInput || !checkOutInput || !nightsInput) return;
+  const nightlyRateInput = document.getElementById("reservation-nightly-rate");
+  const totalAmountInput = form.querySelector('input[name="total_amount"]');
+  const totalSuggestion = document.getElementById("reservation-total-suggestion");
+  if (!checkInInput || !checkOutInput || !nightsInput || !nightlyRateInput || !totalAmountInput || !totalSuggestion) return;
+
+  let totalEditedManually = false;
+
+  const formatMoneyValue = (value) => money.format(Number(value || 0));
+  const updateSuggestedTotal = () => {
+    const nights = Number(nightsInput.value || 0);
+    const nightlyRate = Number(nightlyRateInput.value || 0);
+    const hasSuggestion = Number.isFinite(nights) && nights > 0 && Number.isFinite(nightlyRate) && nightlyRate > 0;
+
+    if (!hasSuggestion) {
+      totalSuggestion.textContent = "Completa noches y tarifa para sugerir un total.";
+      totalAmountInput.dataset.lastSuggestedTotal = "";
+      return;
+    }
+
+    const suggestedTotal = Math.round(nights * nightlyRate);
+    totalSuggestion.textContent = `Sugerencia: ${formatMoneyValue(suggestedTotal)} (${nights} noches x ${formatMoneyValue(nightlyRate)}).`;
+
+    const previousSuggestedTotal = totalAmountInput.dataset.lastSuggestedTotal || "";
+    const currentTotalValue = String(totalAmountInput.value || "").trim();
+    const shouldAutofill =
+      !currentTotalValue || !totalEditedManually || currentTotalValue === previousSuggestedTotal;
+
+    totalAmountInput.dataset.lastSuggestedTotal = String(suggestedTotal);
+    if (shouldAutofill) {
+      totalAmountInput.value = String(suggestedTotal);
+      totalEditedManually = false;
+    }
+  };
 
   const recomputeNights = () => {
     const ci = checkInInput.value;
@@ -2136,10 +2289,26 @@ function bindReservationPricing() {
       const diff = Math.max(0, Math.round((d2 - d1) / 86400000));
       nightsInput.value = String(diff);
     }
+    updateSuggestedTotal();
   };
 
+  nightsInput.addEventListener("input", updateSuggestedTotal);
+  nightsInput.addEventListener("change", updateSuggestedTotal);
+  nightlyRateInput.addEventListener("input", updateSuggestedTotal);
+  nightlyRateInput.addEventListener("change", updateSuggestedTotal);
+  totalAmountInput.addEventListener("input", () => {
+    const currentTotalValue = String(totalAmountInput.value || "").trim();
+    totalEditedManually = currentTotalValue !== "" && currentTotalValue !== (totalAmountInput.dataset.lastSuggestedTotal || "");
+    if (!currentTotalValue) totalEditedManually = false;
+  });
+  form.addEventListener("reset", () => {
+    totalEditedManually = false;
+    totalAmountInput.dataset.lastSuggestedTotal = "";
+    totalSuggestion.textContent = "Completa noches y tarifa para sugerir un total.";
+  });
   checkInInput.addEventListener("change", recomputeNights);
   checkOutInput.addEventListener("change", recomputeNights);
+  updateSuggestedTotal();
 }
 
 function bindGuestEditButtons() {
@@ -2238,6 +2407,17 @@ function bindGuestHistoryButtons() {
     } catch (error) {
       list.innerHTML = `<li class="record-item status error">Error al cargar historial: ${error.message}</li>`;
     }
+  });
+}
+
+function bindReservationEditButtons() {
+  document.body.addEventListener("click", (event) => {
+    const button = event.target.closest(".btn-edit-reservation");
+    if (!button) return;
+
+    const reservationId = Number(button.dataset.reservationId);
+    if (!Number.isInteger(reservationId) || reservationId <= 0) return;
+    openReservationEditor(reservationId);
   });
 }
 
@@ -2761,6 +2941,7 @@ bindReservationForm();
 bindReservationPricing();
 bindGuestEditButtons();
 bindGuestHistoryButtons();
+bindReservationEditButtons();
 bindDeleteButtons();
 bindCabinForm();
 bindCabinFormOpenButtons();
