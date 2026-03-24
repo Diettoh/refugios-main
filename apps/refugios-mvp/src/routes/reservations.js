@@ -59,6 +59,82 @@ function statusFromLeadStage(leadStage) {
   return "pending";
 }
 
+async function syncReservationSales({
+  reservationId,
+  lodgingAmount,
+  additionalCharge,
+  paymentMethod,
+  saleDate,
+  cabinName,
+  guestName,
+  nights,
+  notes
+}) {
+  const normalizedLodgingAmount = Math.max(0, Math.round(Number(lodgingAmount || 0)));
+  const normalizedAdditionalCharge = Math.max(0, Math.round(Number(additionalCharge || 0)));
+  const normalizedPaymentMethod = nonEmptyString(paymentMethod) || "other";
+  const normalizedSaleDate = nonEmptyString(saleDate);
+  const normalizedCabinName = nonEmptyString(cabinName) || "Alojamiento";
+  const normalizedGuestName = nonEmptyString(guestName) || `Reserva #${reservationId}`;
+  const normalizedNights = Math.max(0, Math.round(Number(nights || 0)));
+  const normalizedNotes = nonEmptyString(notes);
+
+  const lodgingDescription = `Arriendo ${normalizedCabinName} | ${normalizedGuestName} | ${normalizedNights} noches`;
+  const supplementDescription = normalizedNotes
+    ? `Ajuste monto pactado / adicional: ${normalizedNotes}`
+    : `Ajuste monto pactado reserva #${reservationId}`;
+
+  const upsertSale = async ({ category, amount, description }) => {
+    const existing = await query(
+      `SELECT id
+       FROM sales
+       WHERE reservation_id = $1
+         AND category = $2
+       ORDER BY id ASC
+       LIMIT 1`,
+      [reservationId, category]
+    );
+
+    if (amount <= 0) {
+      if (existing.rowCount > 0) {
+        await query("DELETE FROM sales WHERE id = $1", [existing.rows[0].id]);
+      }
+      return;
+    }
+
+    if (existing.rowCount > 0) {
+      await query(
+        `UPDATE sales
+         SET amount = $2,
+             payment_method = $3,
+             sale_date = $4,
+             description = $5
+         WHERE id = $1`,
+        [existing.rows[0].id, amount, normalizedPaymentMethod, normalizedSaleDate, description]
+      );
+      return;
+    }
+
+    await query(
+      `INSERT INTO sales (reservation_id, category, amount, payment_method, sale_date, description)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [reservationId, category, amount, normalizedPaymentMethod, normalizedSaleDate, description]
+    );
+  };
+
+  await upsertSale({
+    category: "lodging",
+    amount: normalizedLodgingAmount,
+    description: lodgingDescription
+  });
+
+  await upsertSale({
+    category: "suplemento",
+    amount: normalizedAdditionalCharge,
+    description: supplementDescription
+  });
+}
+
 router.get("/", async (req, res, next) => {
   try {
     const from = isDateOnly(req.query.from) ? req.query.from : null;
@@ -508,7 +584,7 @@ router.post("/", async (req, res, next) => {
          VALUES ($1, 'lodging', $2, $3, $4, $5)`,
         [
           newReservation.id,
-          computedTotalAmount, // Solo el monto de las noches
+          Math.max(finalTotalAmount - parsedAdditionalCharge, 0), // Respeta el monto pactado base
           payment_method,
           check_in,
           `Arriendo ${cabinResult.rows[0].name} | ${guestName} | ${finalNights} noches`
@@ -788,7 +864,46 @@ router.patch("/:id", async (req, res, next) => {
     if (result.rowCount === 0) {
       return res.status(404).json({ error: "reserva no encontrada" });
     }
-    return res.json(result.rows[0]);
+
+    const updatedReservation = result.rows[0];
+    try {
+      const saleContext = await query(
+        `SELECT
+           r.id,
+           r.check_in,
+           r.total_amount,
+           r.additional_charge,
+           r.payment_method,
+           GREATEST(0, (r.check_out - r.check_in))::int AS nights,
+           r.notes,
+           g.full_name AS guest_name,
+           c.name AS cabin_name
+         FROM reservations r
+         LEFT JOIN guests g ON g.id = r.guest_id
+         LEFT JOIN cabins c ON c.id = r.cabin_id
+         WHERE r.id = $1
+         LIMIT 1`,
+        [id]
+      );
+
+      if (saleContext.rowCount > 0) {
+        const saleRow = saleContext.rows[0];
+        await syncReservationSales({
+          reservationId: saleRow.id,
+          lodgingAmount: Number(saleRow.total_amount || 0) - Number(saleRow.additional_charge || 0),
+          additionalCharge: saleRow.additional_charge,
+          paymentMethod: saleRow.payment_method,
+          saleDate: saleRow.check_in,
+          cabinName: saleRow.cabin_name,
+          guestName: saleRow.guest_name,
+          nights: saleRow.nights,
+          notes: saleRow.notes
+        });
+      }
+    } catch (saleErr) {
+      console.error(`[reservations] Error al sincronizar ventas de la reserva #${id}: ${saleErr.message}`);
+    }
+    return res.json(updatedReservation);
   } catch (error) {
     return next(error);
   }

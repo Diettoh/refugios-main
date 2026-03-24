@@ -1100,6 +1100,29 @@ function getCabinColor(cabin) {
   return cabin.color_hex || defaults.color;
 }
 
+function getCalendarCabinPalette(cabin, idx = 0) {
+  const rawName = String(cabin?.name || "").trim();
+  const rawCode = String(cabin?.short_code || "").trim().toUpperCase();
+  const normalized = `${rawCode} ${rawName}`
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+
+  const paletteByKey = {
+    "1": { className: "is-a", bg: "rgba(37, 99, 235, 0.95)", soft: "rgba(37, 99, 235, 0.18)", text: "#eff6ff", border: "#2563eb", code: rawCode || "1" },
+    "2": { className: "is-b", bg: "rgba(220, 38, 38, 0.95)", soft: "rgba(220, 38, 38, 0.18)", text: "#fef2f2", border: "#dc2626", code: rawCode || "2" },
+    "3": { className: "is-p", bg: "rgba(22, 163, 74, 0.95)", soft: "rgba(22, 163, 74, 0.18)", text: "#f0fdf4", border: "#16a34a", code: rawCode || "3" },
+    casa: { className: "is-c", bg: "rgba(234, 179, 8, 0.95)", soft: "rgba(234, 179, 8, 0.22)", text: "#111827", border: "#eab308", code: rawCode || "C" }
+  };
+
+  if (normalized.includes("casa")) return paletteByKey.casa;
+  if (/\b3\b/.test(normalized) || normalized.includes("refugio 3") || normalized.includes("cabana 3")) return paletteByKey["3"];
+  if (/\b2\b/.test(normalized) || normalized.includes("refugio 2") || normalized.includes("cabana 2")) return paletteByKey["2"];
+  if (/\b1\b/.test(normalized) || normalized.includes("refugio 1") || normalized.includes("cabana 1")) return paletteByKey["1"];
+
+  return idx === 0 ? paletteByKey["1"] : idx === 1 ? paletteByKey["2"] : idx === 2 ? paletteByKey["3"] : paletteByKey.casa;
+}
+
 function getDayGuestLines(activeReservations, cabins) {
   const cabinById = new Map((cabins || []).map((c) => [Number(c.id), c]));
   return activeReservations
@@ -1108,8 +1131,9 @@ function getDayGuestLines(activeReservations, cabins) {
       const name = String(row.guest_name || "").trim().toUpperCase();
       const guests = Number(row.guests_count) || 1;
       const cabin = cabinById.get(Number(row.cabin_id));
-      const color = getCabinColor(cabin);
-      return { label: `${name} X${guests}`, color, status: row.status };
+      const cabinIndex = (cabins || []).findIndex((item) => Number(item.id) === Number(row.cabin_id));
+      const palette = getCalendarCabinPalette(cabin, cabinIndex);
+      return { label: `${name} X${guests}`, color: palette.border, status: row.status, palette };
     });
 }
 
@@ -1117,9 +1141,9 @@ function renderDayCabinChips(cabins, activeReservations) {
   const occupied = new Set(activeReservations.map((r) => r.cabin_id).filter((id) => Number.isInteger(id)));
   return cabins
     .map((cabin, idx) => {
-      const rawCode = String(cabin.short_code || "").trim().toUpperCase();
-      const code = rawCode ? rawCode.charAt(0) : (idx === 0 ? "A" : idx === 1 ? "B" : idx === 2 ? "P" : "C");
-      const colorClass = idx === 0 ? "is-a" : idx === 1 ? "is-b" : idx === 2 ? "is-p" : "is-c";
+      const palette = getCalendarCabinPalette(cabin, idx);
+      const code = palette.code ? String(palette.code).charAt(0) : idx === 0 ? "1" : idx === 1 ? "2" : idx === 2 ? "3" : "C";
+      const colorClass = palette.className;
       const activeClass = occupied.has(cabin.id) ? "is-active" : "";
       return `<span class="calendar-cabin-chip ${colorClass} ${activeClass}">${code}</span>`;
     })
@@ -1140,9 +1164,9 @@ function renderCalendarDay(dateKey, dayLabel, dayClasses, reservations, cabins, 
           (line) => {
             const confirmedClass = isPdf && line.status === "confirmed" ? " is-confirmed" : "";
             if (isPdf) {
-              return `<span class="calendar-guest-row${confirmedClass}">${line.label}</span>`;
+              return `<span class="calendar-guest-row${confirmedClass}" style="background:${line.palette.bg};color:${line.palette.text};border-left:4px solid ${line.palette.border}">${line.label}</span>`;
             }
-            return `<span class="calendar-guest-row" style="border-left-color:${line.color};background:${line.color}22">${line.label}</span>`;
+            return `<span class="calendar-guest-row" style="border-left-color:${line.palette.border};background:${line.palette.soft}">${line.label}</span>`;
           }
         )
         .join("")
