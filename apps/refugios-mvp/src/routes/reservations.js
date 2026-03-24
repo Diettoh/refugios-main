@@ -387,14 +387,15 @@ router.post("/", async (req, res, next) => {
     }
 
     const providedNightlyRate = nightly_rate != null && nightly_rate !== "" ? Number(nightly_rate) : NaN;
-    const finalNightlyRate =
-      Number.isFinite(providedNightlyRate) && providedNightlyRate > 0
-        ? providedNightlyRate
-        : Number.isFinite(cabinNightlyRate) && cabinNightlyRate > 0
-          ? cabinNightlyRate
-          : NaN;
+    const hasExplicitNightlyRate = Number.isFinite(providedNightlyRate) && providedNightlyRate >= 0;
+    const hasCabinNightlyRate = Number.isFinite(cabinNightlyRate) && cabinNightlyRate > 0;
+    const finalNightlyRate = hasExplicitNightlyRate
+      ? providedNightlyRate
+      : hasCabinNightlyRate
+        ? cabinNightlyRate
+        : NaN;
 
-    if (!Number.isFinite(finalNightlyRate) || finalNightlyRate <= 0) {
+    if (!Number.isFinite(finalNightlyRate) || finalNightlyRate < 0) {
       return res.status(400).json({
         error: "Falta tarifa por noche. Configúrala en Cabañas o ingrésala en la reserva."
       });

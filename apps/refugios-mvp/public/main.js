@@ -2021,6 +2021,7 @@ function bindReservationGuestLookup() {
 function bindReservationForm() {
   const form = document.getElementById("reservation-form");
   if (!form) return;
+  const nightlyRateInput = form.querySelector('input[name="nightly_rate"]');
 
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -2035,6 +2036,23 @@ function bindReservationForm() {
       setStatus("Debes ingresar RUT del huésped", "error");
       setReservationGuestStatus("Debes ingresar RUT válido.", "error");
       return;
+    }
+
+    const nightlyRateValue = Number(payload.nightly_rate);
+    const hasNightlyRate = Number.isFinite(nightlyRateValue) && nightlyRateValue > 0;
+    if (!hasNightlyRate) {
+      const shouldContinueWithoutRate = window.confirm(
+        "Actualmente no hay una tarifa por noche configurada. Desea continuar igualmente?"
+      );
+      if (!shouldContinueWithoutRate) {
+        setStatus("Debes ingresar una tarifa por noche o confirmar continuar con tarifa 0.", "error");
+        if (nightlyRateInput) {
+          nightlyRateInput.focus();
+          nightlyRateInput.select?.();
+        }
+        return;
+      }
+      payload.nightly_rate = 0;
     }
 
     setStatus("Guardando...", "");
