@@ -123,7 +123,20 @@ router.get("/", async (req, res, next) => {
 
     const result = await query(
       `SELECT
-         s.*,
+         s.id,
+         s.reservation_id,
+         s.category,
+         CASE
+           WHEN lower(coalesce(s.category, '')) = 'lodging' AND r.id IS NOT NULL
+             THEN GREATEST(COALESCE(r.total_amount, 0) - COALESCE(r.additional_charge, 0), 0)::numeric(12,2)
+           WHEN lower(coalesce(s.category, '')) = 'suplemento' AND r.id IS NOT NULL AND COALESCE(r.additional_charge, 0) > 0
+             THEN COALESCE(r.additional_charge, 0)::numeric(12,2)
+           ELSE s.amount
+         END AS amount,
+         s.amount AS raw_amount,
+         s.payment_method,
+         s.sale_date,
+         s.description,
          g.full_name AS guest_name,
          g.document_id AS guest_document,
          g.tax_document_type AS guest_tax_type,
