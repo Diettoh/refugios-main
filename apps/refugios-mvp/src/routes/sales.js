@@ -148,9 +148,17 @@ router.get("/", async (req, res, next) => {
          s.reservation_id,
          s.category,
          CASE
-           WHEN lower(coalesce(s.category, '')) = 'lodging' AND r.id IS NOT NULL
+           WHEN lower(coalesce(s.category, '')) = 'lodging'
+             AND r.id IS NOT NULL
+             AND coalesce(s.description, '') ILIKE 'Arriendo %'
              THEN GREATEST(COALESCE(r.total_amount, 0) - COALESCE(r.additional_charge, 0), 0)::numeric(12,2)
-           WHEN lower(coalesce(s.category, '')) = 'suplemento' AND r.id IS NOT NULL AND COALESCE(r.additional_charge, 0) > 0
+           WHEN lower(coalesce(s.category, '')) = 'suplemento'
+             AND r.id IS NOT NULL
+             AND (
+               coalesce(s.description, '') ILIKE 'Cobro Adicional:%'
+               OR coalesce(s.description, '') ILIKE 'Ajuste monto pactado%'
+             )
+             AND COALESCE(r.additional_charge, 0) > 0
              THEN COALESCE(r.additional_charge, 0)::numeric(12,2)
            ELSE s.amount
          END AS amount,
