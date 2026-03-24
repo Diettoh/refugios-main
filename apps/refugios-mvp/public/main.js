@@ -2388,6 +2388,10 @@ function bindGuestHistoryButtons() {
     const guestId = Number(button.dataset.guestId);
     const guestName = button.dataset.guestName;
     if (!Number.isInteger(guestId) || guestId <= 0) return;
+    const guestRow = (state.guests || []).find((row) => Number(row.id) === guestId) || null;
+    const guestAliasIds = Array.isArray(guestRow?.guest_alias_ids)
+      ? guestRow.guest_alias_ids.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0)
+      : [guestId];
 
     const modal = document.getElementById("guest-history-modal");
     const title = document.getElementById("guest-history-title");
@@ -2400,7 +2404,10 @@ function bindGuestHistoryButtons() {
 
     try {
       // Usamos el filtro guest_id que añadimos al backend
-      const history = await api(`/api/reservations?guest_id=${guestId}`);
+      const params = new URLSearchParams();
+      params.set("guest_id", String(guestId));
+      if (guestAliasIds.length > 0) params.set("guest_ids", guestAliasIds.join(","));
+      const history = await api(`/api/reservations?${params.toString()}`);
       
       if (history.length === 0) {
         list.innerHTML = "<li class=\"record-item\">No hay reservas registradas para este huésped.</li>";

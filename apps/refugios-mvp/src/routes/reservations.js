@@ -179,6 +179,16 @@ router.get("/", async (req, res, next) => {
     if (Number.isInteger(guestId) && guestId > 0) {
       where.push(`r.guest_id = ${addParam(guestId)}`);
     }
+    const guestIdsRaw = String(req.query.guest_ids || "").trim();
+    if (guestIdsRaw) {
+      const guestIds = guestIdsRaw
+        .split(",")
+        .map((value) => Number(String(value).trim()))
+        .filter((value) => Number.isInteger(value) && value > 0);
+      if (guestIds.length > 0) {
+        where.push(`r.guest_id = ANY(${addParam(guestIds)}::int[])`);
+      }
+    }
 
     const reservationDocType = nonEmptyString(req.query.reservation_document_type);
     if (reservationDocType) where.push(`r.reservation_document_type = ${addParam(reservationDocType)}`);
