@@ -920,7 +920,7 @@ function isReservationActiveOnDate(reservation, day) {
   const checkOut = toDateKey(reservation?.check_out);
   if (!targetDay || !checkIn || !checkOut) return false;
   if (reservation.status === "cancelled") return false;
-  return checkIn <= targetDay && targetDay < checkOut;
+  return checkIn <= targetDay && targetDay <= checkOut;
 }
 
 function renderAvailability(reservations) {
@@ -1021,7 +1021,7 @@ function renderOccupancyTimeline(reservations) {
         r.cabin_id === cabin.id && 
         r.status !== "cancelled" &&
         toDateKey(r.check_in) <= dateKey && 
-        dateKey < toDateKey(r.check_out)
+        dateKey <= toDateKey(r.check_out)
       );
 
       const isOccupied = activeOnDay.length > 0;
@@ -1074,7 +1074,7 @@ function getOccupancyForDate(reservations, dateKey, totalCabins, allowedCabinIds
     if (r.status === "cancelled") return false;
     const checkIn = toDateKey(r.check_in);
     const checkOut = toDateKey(r.check_out);
-    return checkIn && checkOut && checkIn <= dateKey && dateKey < checkOut;
+    return checkIn && checkOut && checkIn <= dateKey && dateKey <= checkOut;
   });
   const scoped = allowedCabinIds
     ? active.filter((r) => Number.isInteger(r.cabin_id) && allowedCabinIds.has(r.cabin_id))
@@ -1090,7 +1090,7 @@ function getActiveReservationsForDate(reservations, dateKey) {
     if (r.status === "cancelled") return false;
     const checkIn = toDateKey(r.check_in);
     const checkOut = toDateKey(r.check_out);
-    return checkIn && checkOut && checkIn <= dateKey && dateKey < checkOut;
+    return checkIn && checkOut && checkIn <= dateKey && dateKey <= checkOut;
   });
 }
 
