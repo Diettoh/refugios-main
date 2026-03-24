@@ -244,14 +244,22 @@ router.post("/", async (req, res, next) => {
 
     // Lógica para obtener o crear el huésped
     let parsedGuestId = guest_id ? Number(guest_id) : null;
+    const normalizedGuestName = nonEmptyString(guest_name);
+    const normalizedGuestDocument = nonEmptyString(guest_document);
     
     if (!parsedGuestId) {
-      if (!guest_name || !guest_document) {
-        return res.status(400).json({ error: "Debe proporcionar un guest_id existente o el nombre y RUT del nuevo huésped" });
+      if (!normalizedGuestName) {
+        return res.status(400).json({
+          error: "Debe proporcionar un guest_id existente o el nombre del nuevo huesped"
+        });
       }
+
+      const doc = normalizedGuestDocument;
       
-      // Intentar buscar si el RUT ya existe para evitar duplicados
-      const existingGuest = await query("SELECT id FROM guests WHERE document_id = $1 LIMIT 1", [guest_document.trim()]);
+      let existingGuest = { rowCount: 0 };
+      if (doc) {
+        existingGuest = await query("SELECT id FROM guests WHERE document_id = $1 LIMIT 1", [doc]);
+      }
       
       if (existingGuest.rowCount > 0) {
         parsedGuestId = existingGuest.rows[0].id;
@@ -259,7 +267,7 @@ router.post("/", async (req, res, next) => {
         // Crear nuevo huésped
         const newGuest = await query(
           "INSERT INTO guests (full_name, document_id, email, phone) VALUES ($1, $2, $3, $4) RETURNING id",
-          [guest_name.trim(), guest_document.trim(), guest_email || null, guest_phone || null]
+          [normalizedGuestName, doc, guest_email || null, guest_phone || null]
         );
         parsedGuestId = newGuest.rows[0].id;
       }
@@ -535,6 +543,15 @@ router.post("/", async (req, res, next) => {
 
     res.status(201).json(newReservation);
   } catch (error) {
+    console.error("[reservations] Error en POST /api/reservations:", {
+      message: error.message,
+      guest_id: req.body?.guest_id ?? null,
+      guest_name: req.body?.guest_name ?? null,
+      guest_document: req.body?.guest_document ?? null,
+      cabin_id: req.body?.cabin_id ?? null,
+      check_in: req.body?.check_in ?? null,
+      check_out: req.body?.check_out ?? null
+    });
     next(error);
   }
 });

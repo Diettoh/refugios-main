@@ -1954,6 +1954,11 @@ function bindReservationGuestLookup() {
       clearGuest();
       return;
     }
+    if (rut === "0" || rut.length < 7) {
+      guestIdInput.value = "";
+      setReservationGuestStatus("Ingresa un RUT valido para buscar huesped.", "error");
+      return;
+    }
 
     const seq = ++lookupSeq;
     setReservationGuestStatus("Buscando huésped por RUT...");
@@ -2065,23 +2070,18 @@ function bindReservationForm() {
       const channelPayment = String(payload.channel_payment || "").toLowerCase();
       const channelMapping = channelPaymentToReservation[channelPayment];
       const reservationPayload = {
+        ...payload,
         guest_id: guestId,
+        guest_name: payload.guest_full_name,
+        guest_document: payload.guest_document_id,
         channel_payment: channelPayment,
-        source: channelMapping?.source,
-        payment_method: channelMapping?.payment_method,
-        check_in: payload.check_in,
-        check_out: payload.check_out,
+        source: channelMapping?.source || payload.source,
+        payment_method: channelMapping?.payment_method || payload.payment_method,
         check_in_time: payload.check_in_time || null,
         checkout_time: payload.checkout_time || null,
-        guests_count: payload.guests_count,
-        cabin_id: payload.cabin_id,
-        nightly_rate: payload.nightly_rate,
-        nights: payload.nights,
-        total_amount: payload.total_amount,
         additional_charge: payload.additional_charge || 0,
         tax_document_type: payload.tax_document_type || "sii",
         notes: payload.notes || null
-        // total_amount se calcula en el backend segun noches x tarifa de la cabaña
       };
 
       if (!reservationPayload.source || !reservationPayload.payment_method) {

@@ -163,7 +163,9 @@ router.get("/", async (_req, res, next) => {
 router.get("/by-document/:documentId", async (req, res, next) => {
   try {
     const documentId = normalizeDocumentId(req.params.documentId);
-    if (!documentId) return res.status(400).json({ error: "documentId invalido" });
+    if (!documentId || documentId === "0" || documentId.length < 7) {
+      return res.status(400).json({ error: "documentId invalido" });
+    }
 
     const result = await query(
       `WITH guest_norm AS (
@@ -284,6 +286,7 @@ router.post("/", async (req, res, next) => {
 
     res.status(201).json(result.rows[0]);
   } catch (error) {
+    console.error("[guests] Error en POST /api/guests:", error);
     next(error);
   }
 });
