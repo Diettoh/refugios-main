@@ -646,6 +646,19 @@ function filterRows(rows, dateField) {
   return rows.filter((row) => inDateRange(row[dateField], state.periodFrom, state.periodTo));
 }
 
+function saleMatchesPeriod(row, from, to) {
+  const hasReservationPeriod = Boolean(row?.reservation_check_in && row?.reservation_check_out);
+  if (hasReservationPeriod) {
+    const checkIn = toDateKey(row.reservation_check_in);
+    const checkOut = toDateKey(row.reservation_check_out);
+    if (!checkIn || !checkOut) return false;
+    if (from && checkOut < from) return false;
+    if (to && checkIn > to) return false;
+    return true;
+  }
+  return inDateRange(row?.sale_date, from, to);
+}
+
 function updatePeriodLabel() {
   const label = document.getElementById("current-period");
   if (!label) return;
@@ -1597,7 +1610,9 @@ async function loadAll() {
   state.reservations = reservations;
 
   const filteredReservations = reservations;
-  const filteredSales = filterRows(sales, "sale_date");
+  const filteredSales = (state.periodFrom || state.periodTo)
+    ? sales.filter((row) => saleMatchesPeriod(row, state.periodFrom, state.periodTo))
+    : sales;
   const filteredExpenses = expenses;
   const filteredDocuments = filterRows(documents, "issue_date");
   const filteredGuests = state.periodFrom || state.periodTo
@@ -1754,7 +1769,7 @@ function refreshMonthlyReportTables() {
   if (!state.sales || !state.expenses) return;
   const { from, to } = getDashboardVentasPeriod();
   if (!from || !to) return;
-  const sales = (state.sales || []).filter((r) => inDateRange(r.sale_date, from, to));
+  const sales = (state.sales || []).filter((r) => saleMatchesPeriod(r, from, to));
   const expenses = (state.expenses || []).filter((r) => inDateRange(r.expense_date, from, to));
   renderMonthlyTables(from, to, sales, expenses);
 }
@@ -3720,7 +3735,7 @@ function renderCabanasDash(from, to) {
     return ci >= from && ci <= to;
   });
   const cabins = state.cabins || [];
-  const sales = (state.sales || []).filter((s) => inDateRange(s.sale_date, from, to));
+  const sales = (state.sales || []).filter((s) => saleMatchesPeriod(s, from, to));
 
   const revenueByReservation = new Map();
   for (const sale of sales) {

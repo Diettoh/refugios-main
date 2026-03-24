@@ -73,8 +73,29 @@ router.get("/", async (req, res, next) => {
 
     const from = isDateOnly(req.query.from) ? req.query.from : null;
     const to = isDateOnly(req.query.to) ? req.query.to : null;
-    if (from) where.push(`s.sale_date >= ${addParam(from)}::date`);
-    if (to) where.push(`s.sale_date <= ${addParam(to)}::date`);
+    if (from && to) {
+      const fromParam = addParam(from);
+      const toParam = addParam(to);
+      where.push(`(
+        (r.id IS NOT NULL AND r.check_in <= ${toParam}::date AND r.check_out >= ${fromParam}::date)
+        OR
+        (r.id IS NULL AND s.sale_date >= ${fromParam}::date AND s.sale_date <= ${toParam}::date)
+      )`);
+    } else if (from) {
+      const fromParam = addParam(from);
+      where.push(`(
+        (r.id IS NOT NULL AND r.check_out >= ${fromParam}::date)
+        OR
+        (r.id IS NULL AND s.sale_date >= ${fromParam}::date)
+      )`);
+    } else if (to) {
+      const toParam = addParam(to);
+      where.push(`(
+        (r.id IS NOT NULL AND r.check_in <= ${toParam}::date)
+        OR
+        (r.id IS NULL AND s.sale_date <= ${toParam}::date)
+      )`);
+    }
 
     const category = nonEmptyString(req.query.category);
     if (category) where.push(`lower(s.category) = lower(${addParam(category)})`);
