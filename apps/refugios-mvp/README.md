@@ -177,6 +177,8 @@ export RENDER_SERVICE_ID=srv-...
 ## Migraciones
 - SQL versionado en `db/migrations`
 - Tabla de control `schema_migrations`
+- Render y Docker ya no ejecutan migraciones automáticamente al iniciar
+- Las migraciones y cargas históricas quedan para ejecución manual controlada
 - Seed histórico desde staging de ventas 2026: `db/migrations/014_seed_ventas_2026_from_staging.sql`
 - Reparación idempotente de filas faltantes: `db/migrations/015_fix_seed_ventas_2026_missing_rows.sql`
 
@@ -184,6 +186,10 @@ Comandos:
 ```bash
 make migrate
 make seed
+npm run db:migrate
+npm run db:migrate:schema
+npm run db:migrate:data
+npm run db:backup
 ```
 
 Incluye migración de usuarios de prueba en `002_seed_test_users.sql`.
@@ -244,7 +250,6 @@ Se importan automáticamente los PDF de ventas/reservas y los Excel de gastos de
 - `GET/POST/DELETE /api/sales`
 - `GET/POST/DELETE /api/expenses`
 - `GET/POST/DELETE /api/documents`
-- `GET /api/dashboard/summary`
 
 ## Documentación de uso
 - **Manual de usuario extenso**: `docs/MANUAL_USUARIO.md` — guía completa de todas las secciones, flujos y solución de problemas.
@@ -260,7 +265,9 @@ Se importan automáticamente los PDF de ventas/reservas y los Excel de gastos de
 1. Conectar repo
 2. Deploy con Docker desde `apps/refugios-mvp/Dockerfile` o usar `render.yaml`
 3. En Render Dashboard -> Environment, definir `DATABASE_URL` (Neon/Postgres)
-4. Redeploy manual
+4. El deploy ya no ejecuta migraciones automaticamente
+5. Si hay cambios de esquema, ejecutar `npm run db:migrate` manualmente antes del redeploy
+6. Redeploy manual
 
 Si `DATABASE_URL` falta, la app inicia pero los endpoints `/api/*` responderan `503`.
 
@@ -340,7 +347,7 @@ Objetivo:
 
 Alcance funcional:
 - `Huéspedes` ahora usa su propio filtro de período (chips anual/mensual).
-- El período de Huéspedes no depende de Dashboard.
+- El período de Huéspedes no depende de la vista de Ventas.
 - Persistencia del filtro de Huéspedes en `localStorage`.
 
 Estado:
@@ -364,7 +371,7 @@ Objetivo:
 Alcance funcional:
 - KPI de ventas ajustado a comparación `vs mes anterior`.
 - Resumen visual de los últimos 3 meses (monto, transacciones y variación mensual).
-- Filtros/períodos independientes por sección (`Dashboard`, `Reservas`, `Ventas`, `Gastos`) con memoria en `localStorage`.
+- Filtros/períodos independientes por sección (`Reservas`, `Ventas`, `Gastos`) con memoria en `localStorage`.
 
 Estado:
 - `Completado`.
@@ -388,7 +395,7 @@ Objetivo:
 
 Alcance funcional:
 - Huespedes, reservas, ventas, gastos y documentos.
-- Dashboard de resumen operativo.
+- Disponibilidad como vista principal y gestión operativa unificada.
 - Importacion historica por CSV.
 - Despliegue en Render/Vercel con `DATABASE_URL`.
 
@@ -418,7 +425,7 @@ Objetivo:
 - Mejorar uso diario y lectura de resultados para toma de decisiones.
 
 Entregables cerrados:
-- [x] Dashboard con metricas coherentes.
+- [x] Vista financiera con metricas coherentes.
 - [x] Tema claro/oscuro persistente.
 - [x] Vistas con foco en tablas y filtros operativos.
 

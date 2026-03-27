@@ -9,14 +9,11 @@ cd "$(dirname "$0")"
 echo "=== Refugios MVP - Tunnel Cloudflare ==="
 echo ""
 
-echo "[1/4] Levantando DB y app con Docker..."
+echo "[1/3] Levantando DB y app con Docker..."
 docker compose -f docker-compose.tunnel.yml up -d --build
 sleep 8
 
-echo "[2/4] Ejecutando migraciones..."
-docker compose -f docker-compose.tunnel.yml exec -T app npm run db:migrate 2>/dev/null || true
-
-echo "[3/4] Iniciando Cloudflare Tunnel..."
+echo "[2/3] Iniciando Cloudflare Tunnel..."
 echo "La URL pública cambia cada vez que reinicias el tunnel."
 echo ""
 
@@ -26,7 +23,7 @@ sleep 12
 URL=$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' /tmp/cloudflared-tunnel.log 2>/dev/null | head -1)
 
 echo ""
-echo "[4/4] Listo."
+echo "[3/3] Listo."
 echo ""
 if [ -n "$URL" ]; then
   echo "URL publica (comparte este enlace): $URL"

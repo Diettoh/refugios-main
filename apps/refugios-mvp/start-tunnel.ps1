@@ -10,7 +10,7 @@ Write-Host "=== Refugios MVP - Tunnel Cloudflare ===" -ForegroundColor Cyan
 Write-Host ""
 
 # 1. Levantar DB + app
-Write-Host "[1/3] Levantando DB y app con Docker..." -ForegroundColor Yellow
+Write-Host "[1/2] Levantando DB y app con Docker..." -ForegroundColor Yellow
 docker compose -f docker-compose.tunnel.yml up -d --build
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Error al levantar contenedores." -ForegroundColor Red
@@ -21,13 +21,8 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host "Esperando a que la app este lista..." -ForegroundColor Gray
 Start-Sleep -Seconds 8
 
-# 2. Migraciones
-Write-Host "[2/3] Ejecutando migraciones..." -ForegroundColor Yellow
-docker compose -f docker-compose.tunnel.yml exec -T app npm run db:migrate 2>$null
-if ($LASTEXITCODE -ne 0) { Write-Host "  (migraciones ya aplicadas o error)" -ForegroundColor Gray }
-
-# 3. Tunnel (URL variable - se imprime al conectar)
-Write-Host "[3/3] Iniciando Cloudflare Tunnel..." -ForegroundColor Yellow
+# 2. Tunnel (URL variable - se imprime al conectar)
+Write-Host "[2/2] Iniciando Cloudflare Tunnel..." -ForegroundColor Yellow
 Write-Host "La URL publica cambia cada vez. Copia la URL que aparece abajo." -ForegroundColor Gray
 Write-Host "Para detener: Ctrl+C (los contenedores siguen con: docker compose -f docker-compose.tunnel.yml down)" -ForegroundColor Gray
 Write-Host ""

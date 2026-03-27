@@ -9,7 +9,6 @@ import cabinsRouter from "./routes/cabins.js";
 import salesRouter from "./routes/sales.js";
 import expensesRouter from "./routes/expenses.js";
 import documentsRouter from "./routes/documents.js";
-import dashboardRouter from "./routes/dashboard.js";
 import exportsRouter from "./routes/exports.js";
 import authRouter from "./routes/auth.js";
 import { requireAuth } from "./middleware/auth.js";
@@ -73,7 +72,6 @@ app.use("/api/cabins", cabinsRouter);
 app.use("/api/sales", salesRouter);
 app.use("/api/expenses", expensesRouter);
 app.use("/api/documents", documentsRouter);
-app.use("/api/dashboard", dashboardRouter);
 app.use("/api/exports", exportsRouter);
 
 app.use((error, _req, res, _next) => {

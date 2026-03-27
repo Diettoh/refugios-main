@@ -49,7 +49,6 @@ check:
 	node --check src/routes/expenses.js
 	node --check src/routes/documents.js
 	node --check src/routes/cabins.js
-	node --check src/routes/dashboard.js
 	node --check public/main.js
 	node --check scripts/migrate.mjs
 	node --check scripts/seed.mjs

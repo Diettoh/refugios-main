@@ -39,11 +39,7 @@
       <nav class="sidebar__nav">
         <span class="sidebar__section-label">Principal</span>
 
-        <a href="#section-dashboard" class="sidebar__link is-active">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
-          <span>Dashboard</span>
-        </a>
-        <a href="#section-availability" class="sidebar__link">
+        <a href="#section-availability" class="sidebar__link is-active">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
           <span>Disponibilidad</span>
         </a>
@@ -65,7 +61,7 @@
 
         <span class="sidebar__section-label">Finanzas</span>
 
-        <a href="#section-dashboard-ventas" class="sidebar__link">
+        <a href="#section-sales" class="sidebar__link">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>
           <span>Ventas</span>
         </a>
@@ -78,20 +74,6 @@
           <span>Documentos</span>
         </a>
 
-        <span class="sidebar__section-label">Informes</span>
-
-        <a href="#section-dash-gastos" class="sidebar__link">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a10 10 0 0 1 0 20"/><path d="M12 2v10l7 4"/></svg>
-          <span>Informe Gastos</span>
-        </a>
-        <a href="#section-dash-reservas" class="sidebar__link">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a10 10 0 0 1 0 20"/><path d="M12 2v10l7 4"/></svg>
-          <span>Informe Reservas</span>
-        </a>
-        <a href="#section-dash-cabanas" class="sidebar__link">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a10 10 0 0 1 0 20"/><path d="M12 2v10l7 4"/></svg>
-          <span>Informe Cabañas</span>
-        </a>
       </nav>
 
       <div class="sidebar__footer">
@@ -185,23 +167,6 @@
 
       <!-- Status bar -->
       <div id="status" class="status"></div>
-
-      <!-- ── SECTION: Dashboard overview ── -->
-      <section class="section panel" id="section-dashboard">
-        <div class="section__header">
-          <div>
-            <h1 class="section__title">AvA Refugios · Panel</h1>
-            <p class="section__desc">Gestión operativa en Malalcahuello, Araucanía Andina. Control de reservas, pagos y operación diaria.</p>
-          </div>
-          <div class="section__header-actions">
-            <span class="badge badge--info" id="current-period">Período: Histórico acumulado</span>
-          </div>
-        </div>
-
-        <!-- Summary KPI cards -->
-        <div class="kpi-row" id="summary"></div>
-
-      </section>
 
       <!-- ── SECTION: Availability ── -->
       <section class="section panel" id="section-availability">
@@ -389,16 +354,16 @@
         <ul class="record-list cabins-grid" id="cabins-list"></ul>
       </section>
 
-      <!-- ── SECTION: Ventas (unificado: dashboard + export por período) ── -->
-      <section class="section panel" id="section-dashboard-ventas">
+      <!-- ── SECTION: Ventas (informes y exportación) ── -->
+      <section class="section panel" id="section-sales">
         <div class="section__header">
           <div>
             <p class="section__label">Finanzas</p>
             <h2 class="section__title">Ventas · Informes y exportación</h2>
           </div>
           <div class="section__actions">
-            <button class="btn btn--ghost btn--sm" id="dashboard-ventas-export-cobros">Exportar cobros CSV</button>
-            <button class="btn btn--ghost btn--sm" id="dashboard-ventas-export-pdf">Exportar PDF</button>
+            <button class="btn btn--ghost btn--sm" id="sales-export-cobros">Exportar cobros CSV</button>
+            <button class="btn btn--ghost btn--sm" id="sales-export-pdf">Exportar PDF</button>
             <button class="btn" data-modal-open="sale-modal">Registrar venta</button>
           </div>
         </div>
@@ -407,17 +372,17 @@
           <div class="filter-bar__controls">
             <label class="filter-bar__field">
               <span>Huésped (Nombre o RUT)</span>
-              <input type="text" id="dashboard-ventas-filter-guest" placeholder="Filtrar por huésped…" />
+              <input type="text" id="sales-filter-guest" placeholder="Filtrar por huésped…" />
             </label>
             <label class="filter-bar__field">
               <span>Cabaña</span>
-              <select id="dashboard-ventas-filter-cabin">
+              <select id="sales-filter-cabin">
                 <option value="">Todas</option>
               </select>
             </label>
             <label class="filter-bar__field">
               <span>Categoría</span>
-              <select id="dashboard-ventas-filter-category">
+              <select id="sales-filter-category">
                 <option value="">Todas</option>
                 <option value="lodging">Alojamiento</option>
                 <option value="suplemento">Suplemento</option>
@@ -427,14 +392,14 @@
             </label>
             <label class="filter-bar__field">
               <span>Período</span>
-              <select id="dashboard-ventas-period-type">
+              <select id="sales-period-type">
                 <option value="month">Mes</option>
                 <option value="quarter">Trimestre</option>
                 <option value="semester">Semestre</option>
                 <option value="year">Año</option>
               </select>
             </label>
-            <label class="filter-bar__field" id="dashboard-ventas-month-wrap">
+            <label class="filter-bar__field" id="sales-month-wrap">
               <span>Mes</span>
               <select id="monthly-report-month">
                 <option value="01">Enero</option>
@@ -451,18 +416,18 @@
                 <option value="12">Diciembre</option>
               </select>
             </label>
-            <label class="filter-bar__field" id="dashboard-ventas-quarter-wrap" style="display:none;">
+            <label class="filter-bar__field" id="sales-quarter-wrap" style="display:none;">
               <span>Trimestre</span>
-              <select id="dashboard-ventas-quarter">
+              <select id="sales-quarter">
                 <option value="1">Q1 (Ene–Mar)</option>
                 <option value="2">Q2 (Abr–Jun)</option>
                 <option value="3">Q3 (Jul–Sep)</option>
                 <option value="4">Q4 (Oct–Dic)</option>
               </select>
             </label>
-            <label class="filter-bar__field" id="dashboard-ventas-semester-wrap" style="display:none;">
+            <label class="filter-bar__field" id="sales-semester-wrap" style="display:none;">
               <span>Semestre</span>
-              <select id="dashboard-ventas-semester">
+              <select id="sales-semester">
                 <option value="1">S1 (Ene–Jun)</option>
                 <option value="2">S2 (Jul–Dic)</option>
               </select>
@@ -636,123 +601,6 @@
         <ul class="record-list" id="documents-list"></ul>
       </section>
 
-      <!-- ── SECTION: Informe Gastos ── -->
-      <section class="section panel" id="section-dash-gastos">
-        <div class="section__header">
-          <div>
-            <p class="section__label">Informes</p>
-            <h2 class="section__title">Gastos · Análisis</h2>
-          </div>
-          <div class="section__actions">
-            <button class="btn btn--ghost btn--sm" id="dash-gastos-export-pdf">Exportar PDF</button>
-          </div>
-        </div>
-        <div class="filter-bar" style="margin-bottom:1rem;">
-          <div class="filter-bar__controls">
-            <label class="filter-bar__field"><span>Período</span>
-              <select id="gastos-dash-period-type"><option value="month">Mes</option><option value="quarter">Trimestre</option><option value="semester">Semestre</option><option value="year">Año</option></select>
-            </label>
-            <label class="filter-bar__field" id="gastos-dash-month-wrap"><span>Mes</span>
-              <select id="gastos-dash-month"><option value="01">Enero</option><option value="02">Febrero</option><option value="03">Marzo</option><option value="04">Abril</option><option value="05">Mayo</option><option value="06">Junio</option><option value="07">Julio</option><option value="08">Agosto</option><option value="09">Septiembre</option><option value="10">Octubre</option><option value="11">Noviembre</option><option value="12">Diciembre</option></select>
-            </label>
-            <label class="filter-bar__field" id="gastos-dash-quarter-wrap" style="display:none;"><span>Trimestre</span>
-              <select id="gastos-dash-quarter"><option value="1">Q1 (Ene–Mar)</option><option value="2">Q2 (Abr–Jun)</option><option value="3">Q3 (Jul–Sep)</option><option value="4">Q4 (Oct–Dic)</option></select>
-            </label>
-            <label class="filter-bar__field" id="gastos-dash-semester-wrap" style="display:none;"><span>Semestre</span>
-              <select id="gastos-dash-semester"><option value="1">S1 (Ene–Jun)</option><option value="2">S2 (Jul–Dic)</option></select>
-            </label>
-            <label class="filter-bar__field"><span>Año</span><select id="gastos-dash-year"></select></label>
-          </div>
-        </div>
-        <div class="dashboard-charts dashboard-charts--grid-2">
-          <div class="dashboard-chart-wrap"><h3 class="dashboard-chart__title">Gastos por categoría</h3><canvas id="gastos-chart-category" width="400" height="220"></canvas></div>
-        </div>
-        <div class="table-wrap" style="margin-top:1.5rem;">
-          <h3 class="dashboard-chart__title">Detalle de gastos</h3>
-          <table class="data-table"><thead><tr><th>Fecha</th><th>Categoría</th><th>Proveedor</th><th>Pago</th><th>Monto</th></tr></thead><tbody id="gastos-dash-table-body"></tbody></table>
-        </div>
-      </section>
-
-      <!-- ── SECTION: Informe Reservas ── -->
-      <section class="section panel" id="section-dash-reservas">
-        <div class="section__header">
-          <div>
-            <p class="section__label">Informes</p>
-            <h2 class="section__title">Reservas · Análisis</h2>
-          </div>
-          <div class="section__actions">
-            <button class="btn btn--ghost btn--sm" id="dash-reservas-export-pdf">Exportar PDF</button>
-          </div>
-        </div>
-        <div class="filter-bar" style="margin-bottom:1rem;">
-          <div class="filter-bar__controls">
-            <label class="filter-bar__field"><span>Período</span>
-              <select id="reservas-dash-period-type"><option value="month">Mes</option><option value="quarter">Trimestre</option><option value="semester">Semestre</option><option value="year">Año</option></select>
-            </label>
-            <label class="filter-bar__field" id="reservas-dash-month-wrap"><span>Mes</span>
-              <select id="reservas-dash-month"><option value="01">Enero</option><option value="02">Febrero</option><option value="03">Marzo</option><option value="04">Abril</option><option value="05">Mayo</option><option value="06">Junio</option><option value="07">Julio</option><option value="08">Agosto</option><option value="09">Septiembre</option><option value="10">Octubre</option><option value="11">Noviembre</option><option value="12">Diciembre</option></select>
-            </label>
-            <label class="filter-bar__field" id="reservas-dash-quarter-wrap" style="display:none;"><span>Trimestre</span>
-              <select id="reservas-dash-quarter"><option value="1">Q1 (Ene–Mar)</option><option value="2">Q2 (Abr–Jun)</option><option value="3">Q3 (Jul–Sep)</option><option value="4">Q4 (Oct–Dic)</option></select>
-            </label>
-            <label class="filter-bar__field" id="reservas-dash-semester-wrap" style="display:none;"><span>Semestre</span>
-              <select id="reservas-dash-semester"><option value="1">S1 (Ene–Jun)</option><option value="2">S2 (Jul–Dic)</option></select>
-            </label>
-            <label class="filter-bar__field"><span>Año</span><select id="reservas-dash-year"></select></label>
-          </div>
-        </div>
-        <div class="dashboard-charts dashboard-charts--grid-2">
-          <div class="dashboard-chart-wrap"><h3 class="dashboard-chart__title">Reservas por canal</h3><canvas id="reservas-chart-source" width="400" height="220"></canvas></div>
-          <div class="dashboard-chart-wrap"><h3 class="dashboard-chart__title">Reservas por estado</h3><canvas id="reservas-chart-status" width="400" height="220"></canvas></div>
-          <div class="dashboard-chart-wrap"><h3 class="dashboard-chart__title">Estado de deuda</h3><canvas id="reservas-chart-debt" width="400" height="220"></canvas></div>
-          <div class="dashboard-chart-wrap"><h3 class="dashboard-chart__title">Ingresos por mes</h3><canvas id="reservas-chart-revenue" width="400" height="220"></canvas></div>
-        </div>
-        <div class="table-wrap" style="margin-top:1.5rem;">
-          <h3 class="dashboard-chart__title">Detalle de reservas</h3>
-          <table class="data-table"><thead><tr><th>Check-in</th><th>Check-out</th><th>Huésped</th><th>Cabaña</th><th>Canal</th><th>Monto</th><th>Deuda</th></tr></thead><tbody id="reservas-dash-table-body"></tbody></table>
-        </div>
-      </section>
-
-      <!-- ── SECTION: Informe Cabañas ── -->
-      <section class="section panel" id="section-dash-cabanas">
-        <div class="section__header">
-          <div>
-            <p class="section__label">Informes</p>
-            <h2 class="section__title">Cabañas · Análisis</h2>
-          </div>
-          <div class="section__actions">
-            <button class="btn btn--ghost btn--sm" id="dash-cabanas-export-pdf">Exportar PDF</button>
-          </div>
-        </div>
-        <div class="filter-bar" style="margin-bottom:1rem;">
-          <div class="filter-bar__controls">
-            <label class="filter-bar__field"><span>Período</span>
-              <select id="cabanas-dash-period-type"><option value="month">Mes</option><option value="quarter">Trimestre</option><option value="semester">Semestre</option><option value="year">Año</option></select>
-            </label>
-            <label class="filter-bar__field" id="cabanas-dash-month-wrap"><span>Mes</span>
-              <select id="cabanas-dash-month"><option value="01">Enero</option><option value="02">Febrero</option><option value="03">Marzo</option><option value="04">Abril</option><option value="05">Mayo</option><option value="06">Junio</option><option value="07">Julio</option><option value="08">Agosto</option><option value="09">Septiembre</option><option value="10">Octubre</option><option value="11">Noviembre</option><option value="12">Diciembre</option></select>
-            </label>
-            <label class="filter-bar__field" id="cabanas-dash-quarter-wrap" style="display:none;"><span>Trimestre</span>
-              <select id="cabanas-dash-quarter"><option value="1">Q1 (Ene–Mar)</option><option value="2">Q2 (Abr–Jun)</option><option value="3">Q3 (Jul–Sep)</option><option value="4">Q4 (Oct–Dic)</option></select>
-            </label>
-            <label class="filter-bar__field" id="cabanas-dash-semester-wrap" style="display:none;"><span>Semestre</span>
-              <select id="cabanas-dash-semester"><option value="1">S1 (Ene–Jun)</option><option value="2">S2 (Jul–Dic)</option></select>
-            </label>
-            <label class="filter-bar__field"><span>Año</span><select id="cabanas-dash-year"></select></label>
-          </div>
-        </div>
-        <p class="dashboard-notice" id="cabanas-notice" hidden>La mayoría de reservas aún no tienen cabaña asignada. Los gráficos se completarán a medida que se asignen.</p>
-        <div class="dashboard-charts dashboard-charts--grid-2">
-          <div class="dashboard-chart-wrap"><h3 class="dashboard-chart__title">Noches reservadas por cabaña</h3><canvas id="cabanas-chart-nights" width="400" height="220"></canvas></div>
-          <div class="dashboard-chart-wrap"><h3 class="dashboard-chart__title">Ingresos por cabaña</h3><canvas id="cabanas-chart-revenue" width="400" height="220"></canvas></div>
-          <div class="dashboard-chart-wrap"><h3 class="dashboard-chart__title">Reservas por cabaña</h3><canvas id="cabanas-chart-reservations" width="400" height="220"></canvas></div>
-          <div class="dashboard-chart-wrap"><h3 class="dashboard-chart__title">Ocupación % por cabaña</h3><canvas id="cabanas-chart-occupancy" width="400" height="220"></canvas></div>
-        </div>
-        <div class="table-wrap" style="margin-top:1.5rem;">
-          <h3 class="dashboard-chart__title">Resumen por cabaña</h3>
-          <table class="data-table"><thead><tr><th>Cabaña</th><th>Reservas</th><th>Huéspedes</th><th>Noches</th><th>Ingresos</th><th>Ocupación %</th></tr></thead><tbody id="cabanas-dash-table-body"></tbody></table>
-        </div>
-      </section>
     </main>
 
     <!-- ============================================================

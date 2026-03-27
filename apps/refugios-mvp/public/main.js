@@ -211,9 +211,6 @@ function applyTheme(theme) {
 function refreshChartsForTheme() {
   if (!getAuthToken()) return;
   if (typeof refreshMonthlyReportTables === "function") refreshMonthlyReportTables();
-  if (typeof refreshGastosDash === "function") refreshGastosDash();
-  if (typeof refreshReservasDash === "function") refreshReservasDash();
-  if (typeof refreshCabanasDash === "function") refreshCabanasDash();
 }
 
 function setupThemeToggle() {
@@ -252,11 +249,16 @@ function setupPublicUrlDisplay() {
 function setupFocusMode() {
   const navLinks = [...document.querySelectorAll(".sidebar__link")];
   const panels = [...document.querySelectorAll(".panel")];
-  const DEFAULT_PANEL = "#section-dashboard";
+  const breadcrumbCurrent = document.querySelector(".breadcrumb__current");
+  const DEFAULT_PANEL = "#section-availability";
 
   const setActivePanel = (id) => {
     panels.forEach((panel) => panel.classList.toggle("is-active", `#${panel.id}` === id));
     navLinks.forEach((link) => link.classList.toggle("is-active", link.getAttribute("href") === id));
+    if (breadcrumbCurrent) {
+      const activeLink = navLinks.find((link) => link.getAttribute("href") === id);
+      breadcrumbCurrent.textContent = activeLink?.textContent?.trim() || "Panel";
+    }
     window.scrollTo({ top: 0 });
   };
 
@@ -654,78 +656,6 @@ function saleMatchesPeriod(row, from, to) {
     return true;
   }
   return inDateRange(row?.sale_date, from, to);
-}
-
-function updatePeriodLabel() {
-  const label = document.getElementById("current-period");
-  if (!label) return;
-  if (!state.periodFrom && !state.periodTo) {
-    label.textContent = "Período: Histórico acumulado";
-    return;
-  }
-  const fromText = state.periodFrom ? formatDate(state.periodFrom) : "inicio";
-  const toText = state.periodTo ? formatDate(state.periodTo) : "hoy";
-  label.textContent = `Período: ${fromText} - ${toText}`;
-}
-
-function renderSummary({ sales, expenses, reservations }) {
-  const today = new Date();
-  const monthKey = today.toISOString().slice(0, 7);
-  const monthStart = `${monthKey}-01`;
-  const nextMonthStart = new Date(today.getFullYear(), today.getMonth() + 1, 1).toISOString().slice(0, 10);
-  const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
-  const salesMonth = sales.filter((row) => toDateKey(row.sale_date).startsWith(monthKey));
-  const expensesMonth = expenses.filter((row) => toDateKey(row.expense_date).startsWith(monthKey));
-  const totalSalesMonth = salesMonth.reduce((acc, row) => acc + Number(row.amount || 0), 0);
-  const totalExpensesMonth = expensesMonth.reduce((acc, row) => acc + Number(row.amount || 0), 0);
-  const profitMonth = totalSalesMonth - totalExpensesMonth;
-
-  const activeReservations = reservations.filter((row) => row.status !== "cancelled");
-  const nightsSoldMonth = activeReservations.reduce((acc, row) => {
-    const checkIn = toDateKey(row.check_in);
-    const checkOut = toDateKey(row.check_out);
-    if (!checkIn || !checkOut) return acc;
-    const overlapStart = checkIn > monthStart ? checkIn : monthStart;
-    const overlapEnd = checkOut < nextMonthStart ? checkOut : nextMonthStart;
-    if (overlapEnd <= overlapStart) return acc;
-    const nights = Math.round((new Date(overlapEnd).getTime() - new Date(overlapStart).getTime()) / (24 * 60 * 60 * 1000));
-    return acc + Math.max(0, nights);
-  }, 0);
-  const operationalCabins = getOperationalCabins(state.cabins || []);
-  const totalCabins = Math.max(1, operationalCabins.length || Number(state.totalCabins) || 1);
-  const occupancyPctMonth = Math.min(100, Math.round((nightsSoldMonth / (totalCabins * daysInMonth)) * 100));
-
-  const day = today.getDay();
-  const diffToMonday = day === 0 ? 6 : day - 1;
-  const monday = new Date(today);
-  monday.setDate(today.getDate() - diffToMonday);
-  const sunday = new Date(monday);
-  sunday.setDate(monday.getDate() + 6);
-  const weekFrom = monday.toISOString().slice(0, 10);
-  const weekTo = sunday.toISOString().slice(0, 10);
-
-  const checkinsWeek = reservations.filter((row) => {
-    const d = toDateKey(row.check_in);
-    return d >= weekFrom && d <= weekTo;
-  }).length;
-  const checkoutsWeek = reservations.filter((row) => {
-    const d = toDateKey(row.check_out);
-    return d >= weekFrom && d <= weekTo;
-  }).length;
-
-  const cards = [
-    ["Ventas del mes", money.format(totalSalesMonth)],
-    ["Gastos del mes", money.format(totalExpensesMonth)],
-    ["Utilidad del mes", money.format(profitMonth)],
-    ["Ocupación del mes", `${occupancyPctMonth}%`],
-    ["Noches vendidas mes", String(nightsSoldMonth)],
-    ["Check-in semana", String(checkinsWeek)],
-    ["Check-out semana", String(checkoutsWeek)]
-  ];
-
-  document.getElementById("summary").innerHTML = cards
-    .map(([label, value]) => `<div class="card"><span>${label}</span><strong>${value}</strong></div>`)
-    .join("");
 }
 
 function getExpenseCategoryLabelByKey(key) {
@@ -1616,11 +1546,6 @@ async function loadAll() {
     ? guests.filter((row) => inDateRange(row.reservation_check_in, state.periodFrom, state.periodTo))
     : guests;
 
-  renderSummary({
-    sales: filteredSales,
-    expenses: filteredExpenses,
-    reservations: filteredReservations
-  });
   renderAvailability(wideReservations);
   renderCalendar(wideReservations);
   renderOccupancyTimeline(wideReservations);
@@ -1756,126 +1681,15 @@ async function loadAll() {
     cabinSelect.dispatchEvent(new Event("change"));
   }
   refreshMonthlyReportTables();
-  if (typeof refreshGastosDash === "function") refreshGastosDash();
-  if (typeof refreshReservasDash === "function") refreshReservasDash();
-  if (typeof refreshCabanasDash === "function") refreshCabanasDash();
 }
 
 function refreshMonthlyReportTables() {
   if (!state.sales || !state.expenses) return;
-  const { from, to } = getDashboardVentasPeriod();
+  const { from, to } = getSalesPeriod();
   if (!from || !to) return;
   const sales = (state.sales || []).filter((r) => saleMatchesPeriod(r, from, to));
   const expenses = (state.expenses || []).filter((r) => inDateRange(r.expense_date, from, to));
   renderMonthlyTables(from, to, sales, expenses);
-}
-
-let chartSalesExpenses = null;
-let chartOccupancy = null;
-
-async function loadDashboardAnalytics() {
-  const params = new URLSearchParams();
-  if (state.periodFrom) params.set("from", state.periodFrom);
-  if (state.periodTo) params.set("to", state.periodTo);
-  try {
-    const data = await api(`/api/dashboard/analytics?${params}`);
-    renderDashboardCharts(data);
-    renderDashboardAlerts(data.alerts || []);
-    const cabins = data.cabinsTotal || (state.cabins || []).length || 1;
-    const infoCabins = document.getElementById("info-cabins");
-    const infoAlerts = document.getElementById("info-alerts-count");
-    const infoSales = document.getElementById("info-sales-total");
-    if (infoCabins) infoCabins.textContent = `${cabins} cabaña${cabins !== 1 ? "s" : ""}`;
-    if (infoAlerts) infoAlerts.textContent = `${(data.alerts || []).length} alerta${(data.alerts || []).length !== 1 ? "s" : ""}`;
-    if (infoSales) infoSales.textContent = money.format(data.totals?.sales || 0);
-  } catch (err) {
-    if (chartSalesExpenses) {
-      chartSalesExpenses.destroy();
-      chartSalesExpenses = null;
-    }
-    if (chartOccupancy) {
-      chartOccupancy.destroy();
-      chartOccupancy = null;
-    }
-  }
-}
-
-function renderDashboardCharts(data) {
-  const months = data.months || [];
-  const salesData = (data.salesByMonth || []).map((r) => r.total);
-  const expensesData = (data.expensesByMonth || []).map((r) => r.total);
-  const occupancyData = (data.occupancyByMonth || []).map((r) => r.ocupacion_pct || 0);
-
-  const isDark = document.documentElement.dataset.theme !== "light";
-  const textColor = isDark ? "rgba(240,244,248,0.9)" : "rgba(15,23,42,0.85)";
-  const gridColor = isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.12)";
-  const tooltipBg = isDark ? "rgba(26,35,50,0.95)" : "rgba(255,255,255,0.95)";
-  const tooltipFg = isDark ? "rgba(240,244,248,0.95)" : "rgba(15,23,42,0.9)";
-  const chartOpts = (extra) => ({
-    responsive: true,
-    maintainAspectRatio: true,
-    plugins: {
-      legend: { position: "top", labels: { color: textColor } },
-      tooltip: { backgroundColor: tooltipBg, titleColor: tooltipFg, bodyColor: tooltipFg }
-    },
-    scales: extra?.scales || {}
-  });
-
-  const ctxSales = document.getElementById("chart-sales-expenses");
-  if (ctxSales && typeof Chart !== "undefined") {
-    if (chartSalesExpenses) chartSalesExpenses.destroy();
-    chartSalesExpenses = new Chart(ctxSales, {
-      type: "bar",
-      data: {
-        labels: months,
-        datasets: [
-          { label: "Ventas", data: salesData, backgroundColor: "rgba(52,211,153,0.5)", borderColor: "#34d399", borderWidth: 1 },
-          { label: "Gastos", data: expensesData, backgroundColor: "rgba(248,113,113,0.5)", borderColor: "#f87171", borderWidth: 1 }
-        ]
-      },
-      options: {
-        ...chartOpts(),
-        scales: {
-          x: { ticks: { color: textColor }, grid: { color: gridColor } },
-          y: { ticks: { color: textColor }, grid: { color: gridColor }, beginAtZero: true }
-        }
-      }
-    });
-  }
-
-  const ctxOcc = document.getElementById("chart-occupancy");
-  if (ctxOcc && typeof Chart !== "undefined") {
-    if (chartOccupancy) chartOccupancy.destroy();
-    chartOccupancy = new Chart(ctxOcc, {
-      type: "line",
-      data: {
-        labels: months,
-        datasets: [{ label: "Ocupación %", data: occupancyData, borderColor: "#60a5fa", backgroundColor: "rgba(96,165,250,0.2)", fill: true, tension: 0.3 }]
-      },
-      options: {
-        ...chartOpts(),
-        scales: {
-          x: { ticks: { color: textColor }, grid: { color: gridColor } },
-          y: { ticks: { color: textColor }, grid: { color: gridColor }, min: 0, max: 100 }
-        }
-      }
-    });
-  }
-}
-
-function renderDashboardAlerts(alerts) {
-  const wrap = document.getElementById("dashboard-alerts");
-  const list = document.getElementById("dashboard-alerts-list");
-  if (!wrap || !list) return;
-  if (!alerts || alerts.length === 0) {
-    wrap.hidden = true;
-    list.innerHTML = "";
-    return;
-  }
-  wrap.hidden = false;
-  list.innerHTML = alerts
-    .map((a) => `<li class="alert--${a.type || 'info'}"><strong>${a.title || ""}</strong> ${a.message || ""}</li>`)
-    .join("");
 }
 
 function renderCabinsList(cabins) {
@@ -2487,7 +2301,7 @@ function bindDeleteButtons() {
 }
 
 function bindPeriodControls() {
-  /* Filtro período movido a Dashboard Ventas (sección separada) */
+  /* Filtro período movido a Ventas (sección separada) */
 }
 
 function bindExpensesFilters() {
@@ -2794,12 +2608,12 @@ async function downloadExport(url, defaultFilename) {
   URL.revokeObjectURL(a.href);
 }
 
-function getDashboardVentasPeriod() {
-  const typeEl = document.getElementById("dashboard-ventas-period-type");
+function getSalesPeriod() {
+  const typeEl = document.getElementById("sales-period-type");
   const yearEl = document.getElementById("monthly-report-year");
   const monthEl = document.getElementById("monthly-report-month");
-  const quarterEl = document.getElementById("dashboard-ventas-quarter");
-  const semesterEl = document.getElementById("dashboard-ventas-semester");
+  const quarterEl = document.getElementById("sales-quarter");
+  const semesterEl = document.getElementById("sales-semester");
   const type = (typeEl?.value || "month");
   const year = parseInt(yearEl?.value || new Date().getFullYear(), 10);
   let from, to;
@@ -2831,28 +2645,14 @@ function getDashboardVentasPeriod() {
 }
 
 function bindExportButtons() {
-  const cobrosBtn = document.getElementById("dashboard-ventas-export-cobros");
+  const cobrosBtn = document.getElementById("sales-export-cobros");
   if (cobrosBtn) {
     cobrosBtn.addEventListener("click", async () => {
       try {
-        const { from, to } = getDashboardVentasPeriod();
+        const { from, to } = getSalesPeriod();
         const q = `?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
         await downloadExport(`/api/exports/cobros.csv${q}`, `cobros_${from}_${to}.csv`);
         setStatus("Cobros exportados", "ok");
-      } catch (e) {
-        setStatus(e.message || "Error al exportar", "error");
-      }
-    });
-  }
-
-  const gastosBtn = document.getElementById("dashboard-ventas-export-gastos");
-  if (gastosBtn) {
-    gastosBtn.addEventListener("click", async () => {
-      try {
-        const { from, to } = getDashboardVentasPeriod();
-        const q = `?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
-        await downloadExport(`/api/exports/gastos.csv${q}`, `gastos_${from}_${to}.csv`);
-        setStatus("Gastos exportados", "ok");
       } catch (e) {
         setStatus(e.message || "Error al exportar", "error");
       }
@@ -2863,7 +2663,7 @@ function bindExportButtons() {
   if (expensesBtn) {
     expensesBtn.addEventListener("click", async () => {
       try {
-        const { from, to } = getDashboardVentasPeriod();
+        const { from, to } = getSalesPeriod();
         const q = `?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
         await downloadExport(`/api/exports/gastos.csv${q}`, `gastos_${from}_${to}.csv`);
         setStatus("Gastos exportados", "ok");
@@ -2902,59 +2702,11 @@ function bindExportButtons() {
     return `${fmt(from)} – ${fmt(to)}`;
   }
 
-  const ventasPdfBtn = document.getElementById("dashboard-ventas-export-pdf");
+  const ventasPdfBtn = document.getElementById("sales-export-pdf");
   if (ventasPdfBtn) {
     ventasPdfBtn.addEventListener("click", () => {
-      const { from, to } = getDashboardVentasPeriod();
-      exportSectionAsPdf("section-dashboard-ventas", "Ventas · Informes y exportación", getPeriodLabel(from, to));
-    });
-  }
-
-  const gastosPdfBtn = document.getElementById("dash-gastos-export-pdf");
-  if (gastosPdfBtn) {
-    gastosPdfBtn.addEventListener("click", () => {
-      const typeEl = document.getElementById("gastos-dash-period-type");
-      const yearEl = document.getElementById("gastos-dash-year");
-      const monthEl = document.getElementById("gastos-dash-month");
-      const type = typeEl?.value || "month";
-      const year = yearEl?.value || new Date().getFullYear();
-      const month = monthEl?.value || "01";
-      const period = type === "month"
-        ? new Date(`${year}-${month}-01T12:00:00`).toLocaleDateString("es-CL", { month: "long", year: "numeric" })
-        : `${year}`;
-      exportSectionAsPdf("section-dash-gastos", "Gastos · Análisis", period);
-    });
-  }
-
-  const reservasPdfBtn = document.getElementById("dash-reservas-export-pdf");
-  if (reservasPdfBtn) {
-    reservasPdfBtn.addEventListener("click", () => {
-      const typeEl = document.getElementById("reservas-dash-period-type");
-      const yearEl = document.getElementById("reservas-dash-year");
-      const monthEl = document.getElementById("reservas-dash-month");
-      const type = typeEl?.value || "month";
-      const year = yearEl?.value || new Date().getFullYear();
-      const month = monthEl?.value || "01";
-      const period = type === "month"
-        ? new Date(`${year}-${month}-01T12:00:00`).toLocaleDateString("es-CL", { month: "long", year: "numeric" })
-        : `${year}`;
-      exportSectionAsPdf("section-dash-reservas", "Reservas · Análisis", period);
-    });
-  }
-
-  const cabanasPdfBtn = document.getElementById("dash-cabanas-export-pdf");
-  if (cabanasPdfBtn) {
-    cabanasPdfBtn.addEventListener("click", () => {
-      const typeEl = document.getElementById("cabanas-dash-period-type");
-      const yearEl = document.getElementById("cabanas-dash-year");
-      const monthEl = document.getElementById("cabanas-dash-month");
-      const type = typeEl?.value || "month";
-      const year = yearEl?.value || new Date().getFullYear();
-      const month = monthEl?.value || "01";
-      const period = type === "month"
-        ? new Date(`${year}-${month}-01T12:00:00`).toLocaleDateString("es-CL", { month: "long", year: "numeric" })
-        : `${year}`;
-      exportSectionAsPdf("section-dash-cabanas", "Cabañas · Análisis", period);
+      const { from, to } = getSalesPeriod();
+      exportSectionAsPdf("section-sales", "Ventas · Informes y exportación", getPeriodLabel(from, to));
     });
   }
 }
@@ -2993,25 +2745,24 @@ setUiVersion();
 setupPublicUrlDisplay();
 setupFocusMode();
 setupSidebarToggle();
-updatePeriodLabel();
 bindExportButtons();
-setupMonthlyReportDashboard();
+setupSalesSection();
 
 const monthlyCharts = {};
 
-function setupMonthlyReportDashboard() {
-  const periodType = document.getElementById("dashboard-ventas-period-type");
+function setupSalesSection() {
+  const periodType = document.getElementById("sales-period-type");
   const monthSelect = document.getElementById("monthly-report-month");
   const yearSelect = document.getElementById("monthly-report-year");
-  const quarterSelect = document.getElementById("dashboard-ventas-quarter");
-  const semesterSelect = document.getElementById("dashboard-ventas-semester");
-  const monthWrap = document.getElementById("dashboard-ventas-month-wrap");
-  const quarterWrap = document.getElementById("dashboard-ventas-quarter-wrap");
-  const semesterWrap = document.getElementById("dashboard-ventas-semester-wrap");
+  const quarterSelect = document.getElementById("sales-quarter");
+  const semesterSelect = document.getElementById("sales-semester");
+  const monthWrap = document.getElementById("sales-month-wrap");
+  const quarterWrap = document.getElementById("sales-quarter-wrap");
+  const semesterWrap = document.getElementById("sales-semester-wrap");
 
-  const guestFilter = document.getElementById("dashboard-ventas-filter-guest");
-  const cabinFilter = document.getElementById("dashboard-ventas-filter-cabin");
-  const categoryFilter = document.getElementById("dashboard-ventas-filter-category");
+  const guestFilter = document.getElementById("sales-filter-guest");
+  const cabinFilter = document.getElementById("sales-filter-cabin");
+  const categoryFilter = document.getElementById("sales-filter-category");
 
   if (!monthSelect || !yearSelect) return;
 
@@ -3050,7 +2801,7 @@ function setupMonthlyReportDashboard() {
 
   const loadMonthlyReport = async () => {
     if (!getAuthToken()) return;
-    const { from, to } = getDashboardVentasPeriod();
+    const { from, to } = getSalesPeriod();
     if (!from || !to) return;
     
     const guest = guestFilter?.value || "";
@@ -3544,280 +3295,3 @@ async function warmupAndStart() {
 }
 
 warmupAndStart();
-
-/* ================================================================
-   SECTION DASHBOARDS — Informes de Gastos, Reservas y Cabañas
-   ================================================================ */
-
-const debtLabelsMap = { pending: "Pendiente", partial: "Parcial", paid: "Pagado" };
-const statusLabelsMap = { pending: "Pendiente", confirmed: "Confirmada", completed: "Completada", cancelled: "Cancelada" };
-
-function aggregateCountByField(rows, field) {
-  const map = {};
-  for (const row of rows) {
-    const key = String(row[field] || "otros").toLowerCase();
-    map[key] = (map[key] || 0) + 1;
-  }
-  return Object.entries(map)
-    .sort((a, b) => b[1] - a[1])
-    .map(([k, v]) => ({
-      label: sourceLabels[k] || paymentLabels[k] || debtLabelsMap[k] || statusLabelsMap[k] || categoryLabels[k] || k.charAt(0).toUpperCase() + k.slice(1),
-      value: v
-    }));
-}
-
-function aggregateByMonth(rows, dateField, amountKey = "amount") {
-  const map = {};
-  for (const row of rows) {
-    const d = row[dateField];
-    if (!d) continue;
-    const month = (typeof d === "string" ? d : new Date(d).toISOString()).slice(0, 7);
-    map[month] = (map[month] || 0) + Number(row[amountKey] || 0);
-  }
-  const sorted = Object.entries(map).sort((a, b) => a[0].localeCompare(b[0]));
-  return { labels: sorted.map(([k]) => k), values: sorted.map(([, v]) => v) };
-}
-
-function getThemeChartColors() {
-  const isDark = document.documentElement.dataset.theme !== "light";
-  return {
-    textColor: isDark ? "rgba(240,244,248,0.9)" : "rgba(15,23,42,0.85)",
-    gridColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.12)",
-    tooltipBg: isDark ? "rgba(26,35,50,0.95)" : "rgba(255,255,255,0.95)",
-    tooltipFg: isDark ? "rgba(240,244,248,0.95)" : "rgba(15,23,42,0.9)"
-  };
-}
-
-function renderBarChart(canvasId, data, label, color) {
-  const ctx = document.getElementById(canvasId);
-  if (!ctx || typeof Chart === "undefined") return;
-  if (monthlyCharts[canvasId]) { monthlyCharts[canvasId].destroy(); delete monthlyCharts[canvasId]; }
-  const { textColor, gridColor, tooltipBg, tooltipFg } = getThemeChartColors();
-  monthlyCharts[canvasId] = new Chart(ctx, {
-    type: "bar",
-    data: { labels: data.labels, datasets: [{ label, data: data.values, backgroundColor: color || "#34d399", borderWidth: 0 }] },
-    options: {
-      responsive: true, maintainAspectRatio: true,
-      plugins: { legend: { display: false }, tooltip: { backgroundColor: tooltipBg, titleColor: tooltipFg, bodyColor: tooltipFg } },
-      scales: {
-        x: { ticks: { color: textColor }, grid: { color: gridColor } },
-        y: { ticks: { color: textColor }, grid: { color: gridColor }, beginAtZero: true }
-      }
-    }
-  });
-}
-
-function getSectionPeriod(prefix) {
-  const typeEl = document.getElementById(`${prefix}-period-type`);
-  const yearEl = document.getElementById(`${prefix}-year`);
-  const monthEl = document.getElementById(`${prefix}-month`);
-  const quarterEl = document.getElementById(`${prefix}-quarter`);
-  const semesterEl = document.getElementById(`${prefix}-semester`);
-  const type = typeEl?.value || "month";
-  const year = parseInt(yearEl?.value || new Date().getFullYear(), 10);
-  let from, to;
-  if (type === "month") {
-    const month = monthEl?.value || "01";
-    from = `${year}-${month}-01`;
-    to = `${year}-${month}-${String(new Date(year, parseInt(month, 10), 0).getDate()).padStart(2, "0")}`;
-  } else if (type === "quarter") {
-    const q = parseInt(quarterEl?.value || "1", 10);
-    const [m1, m2] = [[1, 3], [4, 6], [7, 9], [10, 12]][q - 1] || [1, 3];
-    from = `${year}-${String(m1).padStart(2, "0")}-01`;
-    to = `${year}-${String(m2).padStart(2, "0")}-${String(new Date(year, m2, 0).getDate()).padStart(2, "0")}`;
-  } else if (type === "semester") {
-    const s = parseInt(semesterEl?.value || "1", 10);
-    from = s === 1 ? `${year}-01-01` : `${year}-07-01`;
-    to = s === 1 ? `${year}-06-30` : `${year}-12-31`;
-  } else {
-    from = `${year}-01-01`; to = `${year}-12-31`;
-  }
-  return { from, to };
-}
-
-function setupSectionDashboard(prefix, renderFn) {
-  const periodType = document.getElementById(`${prefix}-period-type`);
-  const monthSelect = document.getElementById(`${prefix}-month`);
-  const yearSelect = document.getElementById(`${prefix}-year`);
-  const quarterSelect = document.getElementById(`${prefix}-quarter`);
-  const semesterSelect = document.getElementById(`${prefix}-semester`);
-  const monthWrap = document.getElementById(`${prefix}-month-wrap`);
-  const quarterWrap = document.getElementById(`${prefix}-quarter-wrap`);
-  const semesterWrap = document.getElementById(`${prefix}-semester-wrap`);
-  if (!monthSelect || !yearSelect) return () => {};
-
-  const now = new Date();
-  const currentYear = now.getFullYear();
-  const currentMonth = now.getMonth() + 1;
-  for (let y = currentYear; y >= 2020; y--) {
-    const opt = document.createElement("option");
-    opt.value = String(y); opt.textContent = String(y);
-    if (y === currentYear) opt.selected = true;
-    yearSelect.appendChild(opt);
-  }
-  monthSelect.value = String(currentMonth).padStart(2, "0");
-  if (quarterSelect) quarterSelect.value = String(Math.ceil(currentMonth / 3));
-  if (semesterSelect) semesterSelect.value = currentMonth <= 6 ? "1" : "2";
-
-  function updateVisibility() {
-    const type = periodType?.value || "month";
-    if (monthWrap) monthWrap.style.display = type === "month" ? "" : "none";
-    if (quarterWrap) quarterWrap.style.display = type === "quarter" ? "" : "none";
-    if (semesterWrap) semesterWrap.style.display = type === "semester" ? "" : "none";
-  }
-
-  const refresh = () => { const { from, to } = getSectionPeriod(prefix); if (from && to) renderFn(from, to); };
-
-  updateVisibility();
-  periodType?.addEventListener("change", () => { updateVisibility(); refresh(); });
-  monthSelect.addEventListener("change", refresh);
-  yearSelect.addEventListener("change", refresh);
-  quarterSelect?.addEventListener("change", refresh);
-  semesterSelect?.addEventListener("change", refresh);
-
-  return refresh;
-}
-
-/* ── Gastos ── */
-function renderGastosDash(from, to) {
-  const expenses = (state.expenses || []).filter((r) => inDateRange(r.expense_date, from, to));
-  const byCat = aggregateByField(expenses, "category");
-
-  renderPieChart("gastos-chart-category", byCat.length ? byCat : [{ label: "Sin gastos", value: 1 }]);
-
-  const tbody = document.getElementById("gastos-dash-table-body");
-  if (tbody) {
-    tbody.innerHTML = expenses.map((r) => `<tr><td>${formatDate(r.expense_date)}</td><td>${formatExpenseCategoryLabel(r.category)}</td><td>${r.supplier || "-"}</td><td>${paymentLabels[r.payment_method] || r.payment_method || "-"}</td><td>${money.format(r.amount)}</td></tr>`).join("") || "<tr><td colspan='5'>Sin gastos en este período</td></tr>";
-  }
-}
-
-/* ── Reservas ── */
-function renderReservasDash(from, to) {
-  const reservations = (state.reservations || []).filter((r) => {
-    const ci = (typeof r.check_in === "string" ? r.check_in : "").slice(0, 10);
-    return ci >= from && ci <= to;
-  });
-
-  const bySource = aggregateCountByField(reservations, "source");
-  const byStatus = aggregateCountByField(reservations, "status");
-  const byDebt = aggregateCountByField(reservations, "debt_status");
-  const revenueByMonth = aggregateByMonth(reservations, "check_in", "total_amount");
-
-  renderPieChart("reservas-chart-source", bySource.length ? bySource : [{ label: "Sin reservas", value: 1 }]);
-  renderPieChart("reservas-chart-status", byStatus.length ? byStatus : [{ label: "Sin reservas", value: 1 }]);
-  renderPieChart("reservas-chart-debt", byDebt.length ? byDebt : [{ label: "Sin datos", value: 1 }]);
-  renderBarChart("reservas-chart-revenue", revenueByMonth.labels.length ? revenueByMonth : { labels: ["-"], values: [0] }, "Ingresos", "#34d399");
-
-  const tbody = document.getElementById("reservas-dash-table-body");
-  if (tbody) {
-    tbody.innerHTML = reservations.map((r) => `<tr><td>${formatDate(r.check_in)}</td><td>${formatDate(r.check_out)}</td><td>${r.guest_name || "-"}</td><td>${r.cabin_name || "-"}</td><td>${sourceLabels[r.source] || r.source || "-"}</td><td>${money.format(r.total_amount)}</td><td>${debtLabelsMap[r.debt_status] || r.debt_status || "-"}</td></tr>`).join("") || "<tr><td colspan='7'>Sin reservas en este período</td></tr>";
-  }
-}
-
-/* ── Cabañas ── */
-function renderCabanasDash(from, to) {
-  const reservations = (state.reservations || []).filter((r) => {
-    const ci = (typeof r.check_in === "string" ? r.check_in : "").slice(0, 10);
-    return ci >= from && ci <= to;
-  });
-  const cabins = state.cabins || [];
-  const sales = (state.sales || []).filter((s) => saleMatchesPeriod(s, from, to));
-
-  const revenueByReservation = new Map();
-  for (const sale of sales) {
-    const reservationId = Number(sale.reservation_id);
-    if (!Number.isInteger(reservationId)) continue;
-    revenueByReservation.set(
-      reservationId,
-      (revenueByReservation.get(reservationId) || 0) + Number(sale.amount || 0)
-    );
-  }
-
-  const inferCabinId = (reservation) => {
-    if (Number.isInteger(reservation?.cabin_id) && reservation.cabin_id >= 1 && reservation.cabin_id <= 4) return reservation.cabin_id;
-    const txt = `${reservation?.cabin_name || ""} ${reservation?.notes || ""}`.toLowerCase();
-    if (!txt.trim()) return null;
-    if (txt.includes("casa") || txt.includes("ava") || txt.includes("negra")) return 4;
-    if (txt.includes("azul") || /\bcabaña\s*1\b|\bcabana\s*1\b|\b#1\b/.test(txt)) return 1;
-    if (txt.includes("roja") || /\bcabaña\s*2\b|\bcabana\s*2\b|\b#2\b/.test(txt)) return 2;
-    if (txt.includes("verde") || /\bcabaña\s*3\b|\bcabana\s*3\b|\b#3\b/.test(txt)) return 3;
-    return null;
-  };
-
-  const byCabin = {};
-  let unassigned = 0;
-    for (const r of reservations) {
-      const cabinId = inferCabinId(r);
-    if (!cabinId) {
-      unassigned++;
-      continue;
-    }
-    if (!byCabin[cabinId]) byCabin[cabinId] = { nights: 0, revenue: 0, count: 0, guests: new Set() };
-    const nights = Math.max(1, Math.round((new Date(r.check_out) - new Date(r.check_in)) / 86400000));
-    byCabin[cabinId].nights += nights;
-    byCabin[cabinId].revenue += revenueByReservation.get(r.id) ?? Number(r.total_amount || 0);
-    byCabin[cabinId].count += 1;
-    const guestName = String(r.guest_name || "").trim();
-    if (guestName) byCabin[cabinId].guests.add(guestName);
-  }
-
-  const notice = document.getElementById("cabanas-notice");
-  if (notice) notice.hidden = unassigned === 0;
-
-  const fallbackCatalog = [
-    { id: 1, label: "Cabaña 1 (Azul)" },
-    { id: 2, label: "Cabaña 2 (Roja)" },
-    { id: 3, label: "Cabaña 3 (Verde)" },
-    { id: 4, label: "Casa AvA (Negra)" }
-  ];
-  const cabinCatalog = cabins.length
-    ? cabins
-        .filter((c) => Number(c.id) >= 1 && Number(c.id) <= 4)
-        .map((c) => ({ id: c.id, label: c.short_code || c.name || `#${c.id}` }))
-    : [...fallbackCatalog];
-  for (const id of Object.keys(byCabin).map(Number)) {
-    if (id < 1 || id > 4) continue;
-    if (!cabinCatalog.some((c) => c.id === id)) cabinCatalog.push({ id, label: `Cabaña ${id}` });
-  }
-  const cabinIds = cabinCatalog.map((c) => c.id);
-  const cabinLabels = cabinCatalog.map((c) => c.label);
-
-  if (cabinIds.length === 0) {
-    renderPieChart("cabanas-chart-reservations", [{ label: "Sin datos", value: 1 }]);
-    renderBarChart("cabanas-chart-nights", { labels: ["-"], values: [0] }, "Noches", "#60a5fa");
-    renderBarChart("cabanas-chart-revenue", { labels: ["-"], values: [0] }, "Ingresos", "#34d399");
-    renderBarChart("cabanas-chart-occupancy", { labels: ["-"], values: [0] }, "Ocupación %", "#a78bfa");
-  } else {
-    const nightsData = cabinIds.map((id) => byCabin[id]?.nights || 0);
-    const revenueData = cabinIds.map((id) => byCabin[id]?.revenue || 0);
-    const countData = cabinIds.map((id) => byCabin[id]?.count || 0);
-    const daysInRange = Math.max(1, Math.round((new Date(to) - new Date(from)) / 86400000) + 1);
-    const occupancyData = cabinIds.map((id) => Math.min(100, Math.round(((byCabin[id]?.nights || 0) / daysInRange) * 100)));
-
-    renderBarChart("cabanas-chart-nights", { labels: cabinLabels, values: nightsData }, "Noches", "#60a5fa");
-    renderBarChart("cabanas-chart-revenue", { labels: cabinLabels, values: revenueData }, "Ingresos", "#34d399");
-    renderPieChart("cabanas-chart-reservations", countData.some((v) => v > 0) ? cabinLabels.map((l, i) => ({ label: l, value: countData[i] })) : [{ label: "Sin datos", value: 1 }]);
-    renderBarChart("cabanas-chart-occupancy", { labels: cabinLabels, values: occupancyData }, "Ocupación %", "#a78bfa");
-  }
-
-  const tbody = document.getElementById("cabanas-dash-table-body");
-  if (tbody) {
-    tbody.innerHTML = cabinIds.map((id, i) => {
-      const d = byCabin[id] || { count: 0, nights: 0, revenue: 0, guests: new Set() };
-      const guestNames = Array.from(d.guests || []);
-      const guestsSummary = guestNames.length === 0
-        ? "-"
-        : guestNames.length <= 3
-          ? guestNames.join(", ")
-          : `${guestNames.slice(0, 3).join(", ")} (+${guestNames.length - 3})`;
-      const daysInRange = Math.max(1, Math.round((new Date(to) - new Date(from)) / 86400000) + 1);
-      const occ = Math.min(100, Math.round((d.nights / daysInRange) * 100));
-      return `<tr><td>${cabinLabels[i]}</td><td>${d.count}</td><td>${guestsSummary}</td><td>${d.nights}</td><td>${money.format(d.revenue)}</td><td>${occ}%</td></tr>`;
-    }).join("") || "<tr><td colspan='6'>Sin datos</td></tr>";
-  }
-}
-
-/* Setup dashboards and integration */
-var refreshGastosDash = setupSectionDashboard("gastos-dash", renderGastosDash);
-var refreshReservasDash = setupSectionDashboard("reservas-dash", renderReservasDash);
-var refreshCabanasDash = setupSectionDashboard("cabanas-dash", renderCabanasDash);

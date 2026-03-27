@@ -1,12 +1,25 @@
 import pg from 'pg';
+import "dotenv/config";
 
 const { Client } = pg;
-const connectionString = "postgresql://refugios_db_user:Lo7OemwvdKBKSaAUhJfTeYUZwdInBd3Y@dpg-d6u4vif5gffc739hch1g-a.oregon-postgres.render.com/refugios_db";
+const connectionString = process.env.DATABASE_URL?.trim();
 
 async function truncateDB() {
+  if (!connectionString) {
+    console.error("DATABASE_URL no definida. Abortando.");
+    process.exit(1);
+  }
+
+  if (process.env.CONFIRM_DESTRUCTIVE !== "true") {
+    console.error("Abortado. Define CONFIRM_DESTRUCTIVE=true para truncar la base.");
+    process.exit(1);
+  }
+
   const client = new Client({
     connectionString,
-    ssl: { rejectUnauthorized: false }
+    ssl: connectionString.includes("sslmode=require") || connectionString.includes("render.com")
+      ? { rejectUnauthorized: false }
+      : false
   });
 
   try {
