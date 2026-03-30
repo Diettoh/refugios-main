@@ -238,6 +238,7 @@ router.get("/", async (req, res, next) => {
          SELECT reservation_id, SUM(amount) AS paid_amount
          FROM sales
          WHERE reservation_id IS NOT NULL
+           AND category = 'abono'
          GROUP BY reservation_id
        ) sales_totals ON sales_totals.reservation_id = r.id
        ${where.length > 0 ? `WHERE ${where.join(" AND ")}` : ""}
@@ -315,7 +316,8 @@ router.post("/", async (req, res, next) => {
       season_type = null,
       reservation_document_type = null,
       notes = null,
-      additional_charge = 0, // Nuevo: Cobro adicional
+      additional_charge = 0,
+      initial_payment = 0,
       cabin_id
     } = req.body;
 
@@ -615,6 +617,22 @@ router.post("/", async (req, res, next) => {
             payment_method,
             check_in,
             `Cobro Adicional: ${notes}`
+          ]
+        );
+      }
+
+      // 3. Abono inicial (si el cliente pagó algo al reservar)
+      const parsedInitialPayment = initial_payment ? Number(initial_payment) : 0;
+      if (parsedInitialPayment > 0) {
+        await dbClient.query(
+          `INSERT INTO sales (reservation_id, category, amount, payment_method, sale_date, description)
+           VALUES ($1, 'abono', $2, $3, $4, $5)`,
+          [
+            newReservation.id,
+            parsedInitialPayment,
+            payment_method,
+            check_in,
+            `Abono inicial — ${guestName}`
           ]
         );
       }

@@ -764,6 +764,11 @@
               <span>Notas de la reserva (opcional)</span>
               <input type="text" name="notes" id="reservation-notes" placeholder="Ej: Pago adelantado, descuento especial, etc." />
             </label>
+            <label class="form-field">
+              <span>Abono inicial (opcional)</span>
+              <input type="number" name="initial_payment" min="0" value="0" inputmode="numeric" placeholder="0" />
+              <p class="form-helper">Monto que el cliente paga al reservar. Deja en 0 si aún no abona nada.</p>
+            </label>
           </div>
           <div class="modal__actions">
             <button type="button" class="btn btn--ghost" data-modal-close>Cancelar</button>
@@ -802,6 +807,7 @@
             <label class="form-field">
               <span>Categoría</span>
               <select name="category" required>
+                <option value="abono">Abono</option>
                 <option value="lodging">Alojamiento</option>
                 <option value="suplemento">Suplemento</option>
                 <option value="limpieza">Limpieza</option>

@@ -307,12 +307,18 @@ function closeModal(modal) {
   if (!document.querySelector(".form-modal:not([hidden])")) {
     document.body.classList.remove("modal-open");
   }
-  // Resetear sale-modal si fue abierto como "Cobrar"
+  // Resetear sale-modal si fue abierto como "Abonar"
   if (modal.id === "sale-modal") {
     const title = modal.querySelector(".modal__header h3");
     const debtInfo = document.getElementById("sale-debt-info");
+    const categoryInput = document.querySelector("#sale-form [name='category']");
     if (title) title.textContent = "Registrar venta";
     if (debtInfo) { debtInfo.hidden = true; debtInfo.innerHTML = ""; }
+    if (categoryInput) {
+      categoryInput.disabled = false;
+      categoryInput.style.pointerEvents = "";
+      categoryInput.style.opacity = "";
+    }
   }
 }
 
@@ -1612,6 +1618,7 @@ async function loadAll() {
         ${chip(debtLabel(row.debt_status, row.amount_due), debtClass(row.debt_status))}
       </div>
       <div class="record-actions">
+        ${row.debt_status !== "paid" ? `<button type="button" class="btn btn--sm btn--primary" onclick="openSaleModalForReservation(${row.id}, ${Number(row.amount_due || 0)}, '${(row.guest_name || "").replace(/'/g, "\\'")}')">Abonar</button>` : ""}
         <button type="button" class="btn btn--sm btn--ghost btn-edit-reservation" data-reservation-id="${row.id}">Editar</button>
         ${deleteButton("reservations", row.id)}
       </div>
@@ -2550,7 +2557,11 @@ function openSaleModalForReservation(reservationId, amountDue, guestName) {
     if (dateInput) dateInput.value = today;
     if (amountInput) amountInput.value = amountDue > 0 ? amountDue : "";
     if (reservationInput) reservationInput.value = reservationId;
-    if (categoryInput) categoryInput.value = "lodging";
+    if (categoryInput) {
+      categoryInput.value = "abono";
+      categoryInput.style.pointerEvents = "none";
+      categoryInput.style.opacity = "0.6";
+    }
   }
 
   // Mostrar info de deuda
@@ -2570,7 +2581,7 @@ function openSaleModalForReservation(reservationId, amountDue, guestName) {
     }
   }
 
-  if (modalTitle) modalTitle.textContent = `Registrar cobro — Reserva #${reservationId}`;
+  if (modalTitle) modalTitle.textContent = `Registrar abono — Reserva #${reservationId}`;
 
   openModal(modal);
 }
@@ -3080,16 +3091,20 @@ function renderMonthlyTables(from, to, sales, expenses) {
   const buildSubRow = (row) => {
     const desc = row.description || "-";
     const short = desc.length > 28 ? desc.slice(0, 28) + "..." : desc;
+    const isAbono = row.category === "abono";
+    const color = isAbono ? "var(--color-success, #22c55e)" : "var(--color-warning, #f59e0b)";
+    const icon = isAbono ? "💰" : "📌";
+    const label = isAbono ? "Abono" : "Cobro adicional";
     return `
-    <tr style="background: color-mix(in srgb, var(--color-warning, #f59e0b) 6%, transparent); border-top: none;">
+    <tr style="background: color-mix(in srgb, ${color} 6%, transparent); border-top: none;">
       <td></td>
       <td colspan="6" style="padding-left:2rem; font-size:0.82em; color: var(--color-text-muted, #888); border-top:none;">
-        <span style="border-left: 3px solid var(--color-warning, #f59e0b); padding-left: 0.5rem;">
-          📌 <em>Cobro adicional</em>
+        <span style="border-left: 3px solid ${color}; padding-left: 0.5rem;">
+          ${icon} <em>${label}</em>
         </span>
         <span style="margin-left:0.5rem; font-size:0.9em;" title="${desc}">${short}</span>
       </td>
-      <td><strong style="color: var(--color-warning, #f59e0b);">+${money.format(row.amount)}</strong></td>
+      <td><strong style="color: ${color};">${isAbono ? "-" : "+"}${money.format(row.amount)}</strong></td>
       <td colspan="2"></td>
       <td></td>
       <td>
@@ -3104,11 +3119,11 @@ function renderMonthlyTables(from, to, sales, expenses) {
   const rowsHtml = [];
   for (const [, group] of grouped) {
     const main = group.find(r => r.category === "lodging") || group[0];
-    const subs = group.filter(r => r !== main && r.category === "suplemento");
+    const subs = group.filter(r => r !== main && (r.category === "suplemento" || r.category === "abono"));
     rowsHtml.push(buildMainRow(main));
     for (const sub of subs) rowsHtml.push(buildSubRow(sub));
-    // ventas manuales sin categoría lodging/suplemento en el mismo grupo
-    for (const other of group.filter(r => r !== main && r.category !== "suplemento")) {
+    // ventas manuales sin categoría lodging/suplemento/abono en el mismo grupo
+    for (const other of group.filter(r => r !== main && r.category !== "suplemento" && r.category !== "abono")) {
       rowsHtml.push(buildMainRow(other));
     }
   }
