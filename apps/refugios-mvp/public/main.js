@@ -1613,12 +1613,16 @@ async function loadAll() {
         ${chip(`Llega ${formatDate(row.check_in)}${row.check_in_time ? " " + String(row.check_in_time).slice(0, 5) : ""}`)}
         ${chip(`Sale ${formatDate(row.check_out)}${row.checkout_time ? " " + String(row.checkout_time).slice(0, 5) : ""}`)}
         ${row.nights != null ? chip(`${row.nights} noche${Number(row.nights) === 1 ? "" : "s"}`) : ""}
-        ${chip(`Total ${money.format(row.total_amount)}`)}
-        ${chip(`Abonado ${money.format(row.paid_amount || 0)}`)}
-        ${chip(debtLabel(row.debt_status, row.amount_due), debtClass(row.debt_status))}
+        ${Number(row.total_amount) === 0 ? chip("Sin monto — editar", "debt-pending") : chip(`Total ${money.format(row.total_amount)}`)}
+        <button type="button" class="chip chip--btn" id="abono-btn-${row.id}" onclick="togglePaymentHistory(${row.id})">
+          Abonado ${money.format(row.paid_amount || 0)} ▾
+        </button>
+        ${Number(row.total_amount) > 0 ? chip(debtLabel(row.debt_status, row.amount_due), debtClass(row.debt_status)) : ""}
       </div>
+      <div id="payment-history-${row.id}" class="payment-history" hidden></div>
       <div class="record-actions">
         ${row.debt_status !== "paid" ? `<button type="button" class="btn btn--sm btn--primary" onclick="openSaleModalForReservation(${row.id}, ${Number(row.amount_due || 0)}, '${(row.guest_name || "").replace(/'/g, "\\'")}')">Abonar</button>` : ""}
+        ${row.paid_amount == 0 && Number(row.total_amount) > 0 ? `<button type="button" class="btn btn--sm btn--ghost" onclick="migrateReservationPayment(${row.id}, '${(row.guest_name || "").replace(/'/g, "\\'")}')" title="Marcar como pagada (reserva antigua)">Migrar pago</button>` : ""}
         <button type="button" class="btn btn--sm btn--ghost btn-edit-reservation" data-reservation-id="${row.id}">Editar</button>
         ${deleteButton("reservations", row.id)}
       </div>
@@ -3358,6 +3362,147 @@ async function warmupAndStart() {
       }
     });
   }
+}
+
+// ── UI helpers: confirm modal & toast ───────────────────────────────────────
+
+let _confirmCallback = null;
+
+function showConfirm({ title = "Confirmar acción", body = "", okLabel = "Confirmar", okClass = "btn--primary" } = {}, onConfirm) {
+  const modal = document.getElementById("confirm-modal");
+  const titleEl = document.getElementById("confirm-modal-title");
+  const bodyEl = document.getElementById("confirm-modal-body");
+  const okBtn = document.getElementById("confirm-modal-ok");
+  if (!modal) return;
+  if (titleEl) titleEl.textContent = title;
+  if (bodyEl) bodyEl.textContent = body;
+  if (okBtn) {
+    okBtn.className = `btn ${okClass}`;
+    okBtn.textContent = okLabel;
+    okBtn.onclick = () => { closeConfirm(); onConfirm(); };
+  }
+  _confirmCallback = onConfirm;
+  modal.hidden = false;
+  document.body.classList.add("modal-open");
+}
+
+function closeConfirm() {
+  const modal = document.getElementById("confirm-modal");
+  if (modal) modal.hidden = true;
+  _confirmCallback = null;
+  if (!document.querySelector(".form-modal:not([hidden])")) {
+    document.body.classList.remove("modal-open");
+  }
+}
+
+let _toastTimer = null;
+function showToast(message, type = "") {
+  const toast = document.getElementById("toast");
+  if (!toast) return;
+  if (_toastTimer) clearTimeout(_toastTimer);
+  toast.textContent = message;
+  toast.className = `toast${type ? ` toast--${type}` : ""}`;
+  toast.hidden = false;
+  requestAnimationFrame(() => toast.classList.add("toast--visible"));
+  _toastTimer = setTimeout(() => {
+    toast.classList.remove("toast--visible");
+    setTimeout(() => { toast.hidden = true; }, 220);
+  }, 3500);
+}
+
+// ── Historial de pagos por reserva ──────────────────────────────────────────
+
+async function togglePaymentHistory(reservationId) {
+  const panel = document.getElementById(`payment-history-${reservationId}`);
+  const btn = document.getElementById(`abono-btn-${reservationId}`);
+  if (!panel) return;
+
+  if (!panel.hidden) {
+    panel.hidden = true;
+    if (btn) btn.classList.remove("is-open");
+    return;
+  }
+
+  if (btn) btn.classList.add("is-open");
+  panel.hidden = false;
+  panel.innerHTML = `<span class="payment-history__empty">Cargando…</span>`;
+
+  try {
+    const res = await fetch(`/api/sales/by-reservation/${reservationId}`, {
+      headers: { Authorization: `Bearer ${getAuthToken()}` }
+    });
+    if (!res.ok) throw new Error("Error al cargar historial");
+    const payments = await res.json();
+
+    const abonos = payments.filter(p => p.category === "abono");
+
+    if (!abonos.length) {
+      panel.innerHTML = `<span class="payment-history__empty">Sin abonos registrados.</span>`;
+      return;
+    }
+
+    const abonoChips = abonos.map(p => `
+      <span class="payment-history__item">
+        <span>${formatDate(p.sale_date)}</span>
+        <strong>${money.format(p.amount)}</strong>
+        <button class="payment-history__delete" onclick="deleteAbono(${p.id}, ${reservationId})" title="Eliminar abono">✕</button>
+      </span>`).join("");
+
+    panel.innerHTML = `<span class="payment-history__label">Abonos:</span>${abonoChips}`;
+  } catch {
+    panel.innerHTML = `<span class="payment-history__empty" style="color:var(--danger)">Error al cargar.</span>`;
+  }
+}
+
+function deleteAbono(saleId, reservationId) {
+  showConfirm(
+    { title: "Eliminar abono", body: "¿Eliminar este abono? Esta acción no se puede deshacer.", okLabel: "Eliminar", okClass: "btn--danger" },
+    async () => {
+      try {
+        const res = await fetch(`/api/sales/${saleId}`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${getAuthToken()}` }
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          showToast(data.error || "Error al eliminar el abono", "error");
+          return;
+        }
+        showToast("Abono eliminado", "ok");
+        await loadAll();
+      } catch {
+        showToast("Error de red al eliminar el abono", "error");
+      }
+    }
+  );
+}
+
+function migrateReservationPayment(reservationId, guestName) {
+  showConfirm(
+    {
+      title: "Migrar pago",
+      body: `¿Marcar la reserva #${reservationId} (${guestName}) como pagada? Esto crea un abono de migración por el total de la reserva. Úsalo solo si la reserva ya estaba pagada.`,
+      okLabel: "Sí, migrar",
+      okClass: ""
+    },
+    async () => {
+      try {
+        const res = await fetch(`/api/reservations/migrate-payments`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${getAuthToken()}`, "Content-Type": "application/json" }
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          showToast(data.error || "Error en la migración", "error");
+          return;
+        }
+        showToast(data.message || "Migración completada", "ok");
+        await loadAll();
+      } catch {
+        showToast("Error de red en la migración", "error");
+      }
+    }
+  );
 }
 
 warmupAndStart();

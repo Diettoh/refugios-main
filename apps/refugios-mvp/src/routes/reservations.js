@@ -962,4 +962,39 @@ router.delete("/:id", async (req, res, next) => {
   }
 });
 
+// Migrar reservas antiguas que no tienen abonos registrados pero tienen ventas lodging.
+// Crea un abono de migración por el total de la reserva, marcándolas como pagadas.
+router.post("/migrate-payments", async (req, res, next) => {
+  try {
+    const candidates = await query(
+      `SELECT r.id, r.total_amount, r.payment_method, r.check_in
+       FROM reservations r
+       WHERE NOT EXISTS (
+         SELECT 1 FROM sales s WHERE s.reservation_id = r.id AND s.category = 'abono'
+       )
+       AND EXISTS (
+         SELECT 1 FROM sales s WHERE s.reservation_id = r.id AND s.category = 'lodging'
+       )`
+    );
+
+    if (candidates.rowCount === 0) {
+      return res.json({ ok: true, migrated: 0, message: "No hay reservas pendientes de migración" });
+    }
+
+    let migrated = 0;
+    for (const row of candidates.rows) {
+      await query(
+        `INSERT INTO sales (reservation_id, category, amount, payment_method, sale_date, description)
+         VALUES ($1, 'abono', $2, $3, $4, '[MIGRACIÓN] Pago asumido previo al sistema de abonos')`,
+        [row.id, row.total_amount, row.payment_method || "other", row.check_in]
+      );
+      migrated++;
+    }
+
+    return res.json({ ok: true, migrated, message: `${migrated} reserva(s) migrada(s) correctamente` });
+  } catch (error) {
+    return next(error);
+  }
+});
+
 export default router;

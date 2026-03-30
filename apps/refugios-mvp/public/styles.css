@@ -667,6 +667,15 @@ h2.section__title {
   border-color: #15803d;
 }
 
+.btn--danger {
+  background: var(--danger);
+  color: #fff;
+}
+.btn--danger:hover {
+  filter: brightness(1.1);
+  box-shadow: 0 4px 12px rgba(248, 113, 113, 0.35);
+}
+
 .btn--icon {
   width: 2rem;
   height: 2rem;
@@ -1610,6 +1619,75 @@ h2.section__title {
   border-color: rgba(248, 113, 113, 0.3);
 }
 
+.chip--btn {
+  cursor: pointer;
+  background: none;
+  font-family: inherit;
+  transition: opacity 0.15s;
+}
+.chip--btn:hover {
+  opacity: 0.75;
+}
+.chip--btn.is-open {
+  border-color: var(--primary, #6366f1);
+  color: var(--primary, #6366f1);
+}
+
+/* ── Payment history panel ── */
+.payment-history {
+  margin: 0.4rem 0 0.2rem;
+  padding: 0.5rem 0.75rem;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+.payment-history__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: var(--radius-full);
+  font-size: 0.72rem;
+  font-weight: 500;
+  background: var(--ok-soft, rgba(52,211,153,0.1));
+  color: var(--ok, #34d399);
+  border: 1px solid rgba(52, 211, 153, 0.25);
+}
+.payment-history__item--charge {
+  background: var(--bg-elevated);
+  color: var(--ink-secondary);
+  border-color: var(--border);
+}
+.payment-history__empty {
+  font-size: 0.78rem;
+  color: var(--ink-secondary);
+  font-style: italic;
+}
+.payment-history__delete {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--ok, #34d399);
+  font-size: 0.7rem;
+  opacity: 0.6;
+  padding: 0;
+  line-height: 1;
+}
+.payment-history__delete:hover {
+  opacity: 1;
+  color: var(--danger);
+}
+.payment-history__label {
+  font-size: 0.7rem;
+  color: var(--ink-secondary);
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  margin-right: 0.1rem;
+}
+
 /* ── Cabins grid & cabin cards ── */
 .cabins-grid {
   display: grid;
@@ -1892,6 +1970,45 @@ h2.section__title {
   max-height: 90vh;
   overflow-y: auto;
   box-shadow: var(--shadow-lg);
+}
+
+.modal__panel--sm {
+  max-width: 360px;
+}
+
+/* ── Toast notification ── */
+.toast {
+  position: fixed;
+  bottom: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%) translateY(1rem);
+  z-index: 200;
+  padding: 0.65rem 1.25rem;
+  border-radius: var(--radius-full);
+  font-size: 0.85rem;
+  font-weight: 500;
+  background: var(--bg-surface);
+  color: var(--ink);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-lg);
+  opacity: 0;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  pointer-events: none;
+  white-space: nowrap;
+}
+.toast.toast--visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+.toast.toast--ok {
+  background: var(--ok-soft);
+  color: var(--ok);
+  border-color: rgba(52, 211, 153, 0.4);
+}
+.toast.toast--error {
+  background: var(--danger-soft);
+  color: var(--danger);
+  border-color: rgba(248, 113, 113, 0.4);
 }
 
 .modal__header {

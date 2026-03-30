@@ -147,22 +147,7 @@ router.get("/", async (req, res, next) => {
          s.id,
          s.reservation_id,
          s.category,
-         CASE
-           WHEN lower(coalesce(s.category, '')) = 'lodging'
-             AND r.id IS NOT NULL
-             AND coalesce(s.description, '') ILIKE 'Arriendo %'
-             THEN GREATEST(COALESCE(r.total_amount, 0) - COALESCE(r.additional_charge, 0), 0)::numeric(12,2)
-           WHEN lower(coalesce(s.category, '')) = 'suplemento'
-             AND r.id IS NOT NULL
-             AND (
-               coalesce(s.description, '') ILIKE 'Cobro Adicional:%'
-               OR coalesce(s.description, '') ILIKE 'Ajuste monto pactado%'
-             )
-             AND COALESCE(r.additional_charge, 0) > 0
-             THEN COALESCE(r.additional_charge, 0)::numeric(12,2)
-           ELSE s.amount
-         END AS amount,
-         s.amount AS raw_amount,
+         s.amount::numeric(12,2) AS amount,
          s.payment_method,
          s.sale_date,
          COALESCE(r.check_out, s.sale_date) AS effective_period_date,
@@ -196,6 +181,25 @@ router.get("/", async (req, res, next) => {
   }
 });
 
+router.get("/by-reservation/:id", async (req, res, next) => {
+  const reservationId = Number(req.params.id);
+  if (!Number.isInteger(reservationId) || reservationId <= 0) {
+    return res.status(400).json({ error: "id invalido" });
+  }
+  try {
+    const result = await query(
+      `SELECT id, category, amount, payment_method, sale_date, description
+       FROM sales
+       WHERE reservation_id = $1
+       ORDER BY id ASC`,
+      [reservationId]
+    );
+    return res.json(result.rows);
+  } catch (error) {
+    return next(error);
+  }
+});
+
 router.post("/", async (req, res, next) => {
   try {
     const { reservation_id = null, category = "lodging", amount, payment_method, sale_date, description = null } = req.body;
@@ -203,11 +207,39 @@ router.post("/", async (req, res, next) => {
       return res.status(400).json({ error: "amount, payment_method y sale_date son requeridos" });
     }
 
+    const parsedAmount = Number(amount);
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+      return res.status(400).json({ error: "amount debe ser un número positivo" });
+    }
+
+    // Validar que un abono no supere el saldo pendiente
+    if (category === "abono" && reservation_id) {
+      const reservationResult = await query(
+        "SELECT total_amount FROM reservations WHERE id = $1",
+        [reservation_id]
+      );
+      if (reservationResult.rowCount === 0) {
+        return res.status(404).json({ error: "Reserva no encontrada" });
+      }
+      const totalAmount = Number(reservationResult.rows[0].total_amount);
+      const paidResult = await query(
+        "SELECT COALESCE(SUM(amount), 0) AS paid FROM sales WHERE reservation_id = $1 AND category = 'abono'",
+        [reservation_id]
+      );
+      const currentPaid = Number(paidResult.rows[0].paid);
+      const balance = totalAmount - currentPaid;
+      if (parsedAmount > balance) {
+        return res.status(400).json({
+          error: `El abono ($${parsedAmount.toLocaleString("es-CL")}) supera el saldo pendiente ($${balance.toLocaleString("es-CL")})`
+        });
+      }
+    }
+
     const result = await query(
       `INSERT INTO sales (reservation_id, category, amount, payment_method, sale_date, description)
        VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING *`,
-      [reservation_id, category, amount, payment_method, sale_date, description]
+      [reservation_id, category, parsedAmount, payment_method, sale_date, description]
     );
 
     res.status(201).json(result.rows[0]);
@@ -223,6 +255,17 @@ router.delete("/:id", async (req, res, next) => {
   }
 
   try {
+    const existing = await query("SELECT category FROM sales WHERE id = $1", [id]);
+    if (existing.rowCount === 0) {
+      return res.status(404).json({ error: "Venta no encontrada" });
+    }
+    const category = existing.rows[0].category;
+    if (category === "lodging" || category === "suplemento") {
+      return res.status(400).json({
+        error: "No se puede eliminar una venta de sistema. Edita la reserva para corregir los montos."
+      });
+    }
+
     const result = await query("DELETE FROM sales WHERE id = $1 RETURNING id", [id]);
     if (result.rowCount === 0) {
       return res.status(404).json({ error: "Venta no encontrada" });
