@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { query } from "../db/client.js";
+import { query, getClient } from "../db/client.js";
 import { notifyReservationCreatedToTrello } from "../utils/trelloBridge.js";
 
 const router = Router();
@@ -496,7 +496,8 @@ router.post("/", async (req, res, next) => {
     if (total_amount != null && total_amount !== "") {
       const providedTotal = Number(total_amount);
       if (Number.isFinite(providedTotal) && providedTotal > 0) {
-        finalTotalAmount = Math.round(providedTotal) + parsedAdditionalCharge;
+        // total_amount del form ya incluye additional_charge — no sumar encima
+        finalTotalAmount = Math.round(providedTotal);
       }
     }
 
@@ -535,66 +536,68 @@ router.post("/", async (req, res, next) => {
       return res.status(400).json({ error: "reservation_document_type invalido" });
     }
 
-    const result = await query(
-      `INSERT INTO reservations (
-         guest_id,
-         cabin_id,
-         source,
-         payment_method,
-         status,
-         lead_stage,
-         check_in,
-         check_out,
-         check_in_time,
-         checkout_time,
-         follow_up_at,
-         guests_count,
-         total_amount,
-         nightly_rate,
-         nights,
-         cleaning_supplement,
-         season_type,
-         reservation_document_type,
-         notes,
-         additional_charge
-       )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
-       RETURNING *`,
-      [
-        parsedGuestId,
-        parsedCabinId,
-        source,
-        payment_method,
-        normalizedStatus,
-        normalizedLeadStage,
-        check_in,
-        check_out,
-        check_in_time || null,
-        checkout_time || null,
-        follow_up_at || null,
-        parsedGuestsCount,
-        finalTotalAmount,
-        finalNightlyRate,
-        finalNights,
-        parsedCleaningSupplement,
-        normalizedSeasonType,
-        normalizedReservationDocType,
-        notes,
-        parsedAdditionalCharge
-      ]
-    );
-
-    const newReservation = result.rows[0];
-
-    // Auto-crear ventas asociadas a la reserva
+    const dbClient = await getClient();
+    let newReservation;
     try {
+      await dbClient.query("BEGIN");
+
+      const result = await dbClient.query(
+        `INSERT INTO reservations (
+           guest_id,
+           cabin_id,
+           source,
+           payment_method,
+           status,
+           lead_stage,
+           check_in,
+           check_out,
+           check_in_time,
+           checkout_time,
+           follow_up_at,
+           guests_count,
+           total_amount,
+           nightly_rate,
+           nights,
+           cleaning_supplement,
+           season_type,
+           reservation_document_type,
+           notes,
+           additional_charge
+         )
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+         RETURNING *`,
+        [
+          parsedGuestId,
+          parsedCabinId,
+          source,
+          payment_method,
+          normalizedStatus,
+          normalizedLeadStage,
+          check_in,
+          check_out,
+          check_in_time || null,
+          checkout_time || null,
+          follow_up_at || null,
+          parsedGuestsCount,
+          finalTotalAmount,
+          finalNightlyRate,
+          finalNights,
+          parsedCleaningSupplement,
+          normalizedSeasonType,
+          normalizedReservationDocType,
+          notes,
+          parsedAdditionalCharge
+        ]
+      );
+      newReservation = result.rows[0];
+
       // 1. Venta por Alojamiento Base
-      await query(
+      await dbClient.query(
         `INSERT INTO sales (reservation_id, category, amount, payment_method, sale_date, description)
          VALUES ($1, 'lodging', $2, $3, $4, $5)`,
         [
           newReservation.id,
-          Math.max(finalTotalAmount - parsedAdditionalCharge, 0), // Respeta el monto pactado base
+          Math.max(finalTotalAmount - parsedAdditionalCharge, 0),
           payment_method,
           check_in,
           `Arriendo ${cabinResult.rows[0].name} | ${guestName} | ${finalNights} noches`
@@ -603,7 +606,7 @@ router.post("/", async (req, res, next) => {
 
       // 2. Venta por Cobro Adicional (si aplica)
       if (parsedAdditionalCharge > 0) {
-        await query(
+        await dbClient.query(
           `INSERT INTO sales (reservation_id, category, amount, payment_method, sale_date, description)
            VALUES ($1, 'suplemento', $2, $3, $4, $5)`,
           [
@@ -611,12 +614,17 @@ router.post("/", async (req, res, next) => {
             parsedAdditionalCharge,
             payment_method,
             check_in,
-            `Cobro Adicional: ${notes}` // Aquí guardamos la nota obligatoria
+            `Cobro Adicional: ${notes}`
           ]
         );
       }
-    } catch (saleErr) {
-      console.error(`[reservations] Error al desglosar ventas para reserva #${newReservation.id}: ${saleErr.message}`);
+
+      await dbClient.query("COMMIT");
+    } catch (txErr) {
+      await dbClient.query("ROLLBACK");
+      throw txErr;
+    } finally {
+      dbClient.release();
     }
 
     try {

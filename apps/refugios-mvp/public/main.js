@@ -1976,9 +1976,14 @@ function bindReservationForm() {
   const form = document.getElementById("reservation-form");
   if (!form) return;
   const nightlyRateInput = form.querySelector('input[name="nightly_rate"]');
+  let isSubmitting = false;
 
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
+    if (isSubmitting) return;
+    isSubmitting = true;
+    const submitBtn = form.querySelector('[type="submit"]');
+    if (submitBtn) submitBtn.disabled = true;
     const payload = normalize(toPayload(form));
     const reservationId = Number(payload.reservation_id || 0);
     const isEditing = Number.isInteger(reservationId) && reservationId > 0;
@@ -2085,6 +2090,9 @@ function bindReservationForm() {
     } catch (error) {
       setStatus(error.message, "error");
       setReservationGuestStatus(error.message, "error");
+    } finally {
+      isSubmitting = false;
+      if (submitBtn) submitBtn.disabled = false;
     }
   });
 }
@@ -2097,6 +2105,7 @@ function bindReservationPricing() {
   const nightsInput = document.getElementById("reservation-nights");
   const nightlyRateInput = document.getElementById("reservation-nightly-rate");
   const totalAmountInput = form.querySelector('input[name="total_amount"]');
+  const additionalChargeInput = form.querySelector('input[name="additional_charge"]');
   const totalSuggestion = document.getElementById("reservation-total-suggestion");
   if (!checkInInput || !checkOutInput || !nightsInput || !nightlyRateInput || !totalAmountInput || !totalSuggestion) return;
 
@@ -2114,8 +2123,13 @@ function bindReservationPricing() {
       return;
     }
 
-    const suggestedTotal = Math.round(nights * nightlyRate);
-    totalSuggestion.textContent = `Sugerencia: ${formatMoneyValue(suggestedTotal)} (${nights} noches x ${formatMoneyValue(nightlyRate)}).`;
+    const additionalCharge = Math.max(0, Number(additionalChargeInput?.value || 0));
+    const baseTotal = Math.round(nights * nightlyRate);
+    const suggestedTotal = baseTotal + additionalCharge;
+    const suggestionText = additionalCharge > 0
+      ? `Sugerencia: ${formatMoneyValue(suggestedTotal)} (${nights} noches x ${formatMoneyValue(nightlyRate)} + adicional ${formatMoneyValue(additionalCharge)}).`
+      : `Sugerencia: ${formatMoneyValue(suggestedTotal)} (${nights} noches x ${formatMoneyValue(nightlyRate)}).`;
+    totalSuggestion.textContent = suggestionText;
 
     const previousSuggestedTotal = totalAmountInput.dataset.lastSuggestedTotal || "";
     const currentTotalValue = String(totalAmountInput.value || "").trim();
@@ -2157,6 +2171,8 @@ function bindReservationPricing() {
   });
   checkInInput.addEventListener("change", recomputeNights);
   checkOutInput.addEventListener("change", recomputeNights);
+  additionalChargeInput?.addEventListener("input", updateSuggestedTotal);
+  additionalChargeInput?.addEventListener("change", updateSuggestedTotal);
   updateSuggestedTotal();
 }
 

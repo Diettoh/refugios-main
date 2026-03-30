@@ -19,3 +19,12 @@ export async function query(text, params = []) {
   }
   return pool.query(text, params);
 }
+
+export async function getClient() {
+  if (!pool) {
+    const error = new Error("DATABASE_URL no definida");
+    error.code = "MISSING_DATABASE_URL";
+    throw error;
+  }
+  return pool.connect();
+}
