@@ -3017,33 +3017,34 @@ function renderMonthlyTables(from, to, sales, expenses) {
     refugios: { label: "REFUGIOS", count: 0, nights: 0, revenue: 0 }
   };
 
-  salesBody.innerHTML = sales
-    .map(
-      (row) => {
-        const desc = row.description || row.reservation_notes || "-";
-        const isAdd = desc.includes("Cobro Adicional") || row.category === 'suplemento';
-        const short = desc.length > 20 ? desc.slice(0, 20) + "..." : desc;
-        
-        const rut = row.guest_document || "-";
-        const checkIn = row.reservation_check_in ? formatDate(row.reservation_check_in) : "-";
-        const checkOut = row.reservation_check_out ? formatDate(row.reservation_check_out) : "-";
-        const nights = row.reservation_nights || 0;
-        const rate = row.reservation_nightly_rate || 0;
-        const additional = row.reservation_additional_charge || 0;
-        const taxType = (row.guest_tax_type || "sii").toUpperCase();
+  // Agrupar sales por reservation_id para mostrar suplemento como sub-fila
+  const grouped = new Map();
+  for (const row of sales) {
+    const key = row.reservation_id != null ? `r_${row.reservation_id}` : `m_${row.id}`;
+    if (!grouped.has(key)) grouped.set(key, []);
+    grouped.get(key).push(row);
+  }
 
-        const cabin = cabinById.get(Number(row.cabin_id));
-        const isCasa = getCabinCapacity(cabin) >= 8;
-        const rc = isCasa ? "C" : "R";
-
-        if (row.category === "lodging") {
-          const bucket = isCasa ? summary.casa : summary.refugios;
-          bucket.count += 1;
-          bucket.nights += nights;
-          bucket.revenue += Number(row.amount || 0);
-        }
-
-        return `
+  const buildMainRow = (row) => {
+    const desc = row.description || row.reservation_notes || "-";
+    const short = desc.length > 20 ? desc.slice(0, 20) + "..." : desc;
+    const rut = row.guest_document || "-";
+    const checkIn = row.reservation_check_in ? formatDate(row.reservation_check_in) : "-";
+    const checkOut = row.reservation_check_out ? formatDate(row.reservation_check_out) : "-";
+    const nights = row.reservation_nights || 0;
+    const rate = row.reservation_nightly_rate || 0;
+    const additional = row.reservation_additional_charge || 0;
+    const taxType = (row.guest_tax_type || "sii").toUpperCase();
+    const cabin = cabinById.get(Number(row.cabin_id));
+    const isCasa = getCabinCapacity(cabin) >= 8;
+    const rc = isCasa ? "C" : "R";
+    if (row.category === "lodging") {
+      const bucket = isCasa ? summary.casa : summary.refugios;
+      bucket.count += 1;
+      bucket.nights += nights;
+      bucket.revenue += Number(row.amount || 0);
+    }
+    return `
     <tr>
       <td>${formatDate(row.effective_period_date || row.reservation_check_out || row.sale_date)}</td>
       <td>
@@ -3066,9 +3067,7 @@ function renderMonthlyTables(from, to, sales, expenses) {
       <td><strong>${money.format(row.amount)}</strong></td>
       <td>${paymentLabels[row.payment_method] || row.payment_method || "-"}</td>
       <td><span class="badge badge--ghost" style="font-size:0.7em;">${taxType}</span></td>
-      <td title="${desc}" style="cursor:help; font-size:0.85em;">
-        ${isAdd ? "📌 " : ""}${short}
-      </td>
+      <td title="${desc}" style="cursor:help; font-size:0.85em;">${short}</td>
       <td>
         <div style="display:flex; gap:4px;">
           <button class="btn btn--ghost btn--sm" onclick="alert('${desc.replace(/'/g, "\\'")}')" title="Ver nota completa">Ver</button>
@@ -3076,9 +3075,45 @@ function renderMonthlyTables(from, to, sales, expenses) {
         </div>
       </td>
     </tr>`;
-      }
-    )
-    .join("") || "<tr><td colspan='12'>Sin ventas en este mes</td></tr>";
+  };
+
+  const buildSubRow = (row) => {
+    const desc = row.description || "-";
+    const short = desc.length > 28 ? desc.slice(0, 28) + "..." : desc;
+    return `
+    <tr style="background: color-mix(in srgb, var(--color-warning, #f59e0b) 6%, transparent); border-top: none;">
+      <td></td>
+      <td colspan="6" style="padding-left:2rem; font-size:0.82em; color: var(--color-text-muted, #888); border-top:none;">
+        <span style="border-left: 3px solid var(--color-warning, #f59e0b); padding-left: 0.5rem;">
+          📌 <em>Cobro adicional</em>
+        </span>
+        <span style="margin-left:0.5rem; font-size:0.9em;" title="${desc}">${short}</span>
+      </td>
+      <td><strong style="color: var(--color-warning, #f59e0b);">+${money.format(row.amount)}</strong></td>
+      <td colspan="2"></td>
+      <td></td>
+      <td>
+        <div style="display:flex; gap:4px;">
+          <button class="btn btn--ghost btn--sm" onclick="alert('${desc.replace(/'/g, "\\'")}')" title="Ver nota completa">Ver</button>
+          ${deleteButton("sales", row.id)}
+        </div>
+      </td>
+    </tr>`;
+  };
+
+  const rowsHtml = [];
+  for (const [, group] of grouped) {
+    const main = group.find(r => r.category === "lodging") || group[0];
+    const subs = group.filter(r => r !== main && r.category === "suplemento");
+    rowsHtml.push(buildMainRow(main));
+    for (const sub of subs) rowsHtml.push(buildSubRow(sub));
+    // ventas manuales sin categoría lodging/suplemento en el mismo grupo
+    for (const other of group.filter(r => r !== main && r.category !== "suplemento")) {
+      rowsHtml.push(buildMainRow(other));
+    }
+  }
+
+  salesBody.innerHTML = rowsHtml.join("") || "<tr><td colspan='12'>Sin ventas en este mes</td></tr>";
 
   if (summaryBody) {
     summaryBody.innerHTML = [summary.casa, summary.refugios]
