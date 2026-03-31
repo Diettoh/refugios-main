@@ -30,10 +30,10 @@ async function run() {
   const casaAmenities = ["wifi", "parking", "kitchen", "terrace", "trails", "fireplace", "pet_friendly", "hot_tub"];
 
   const cabinsData = [
-    { id: 1, name: 'Refugio 1', short: 'R1', type: 'small', pax: 4, color: '#2563eb', icon: '🌲', desc: refugioDesc, am: refugioAmenities },
-    { id: 2, name: 'Refugio 2', short: 'R2', type: 'small', pax: 4, color: '#10b981', icon: '🌲', desc: refugioDesc, am: refugioAmenities },
-    { id: 3, name: 'Refugio 3', short: 'R3', type: 'small', pax: 4, color: '#f59e0b', icon: '🌲', desc: refugioDesc, am: refugioAmenities },
-    { id: 4, name: 'Casa AvA',  short: 'CASA', type: 'large', pax: 8, color: '#1e293b', icon: '🏠', desc: casaDesc, am: casaAmenities }
+    { id: 1, name: 'Cabaña 1 Azul', short: 'C1', type: 'small', pax: 4, color: '#2563eb', icon: '🏡', desc: refugioDesc, am: refugioAmenities },
+    { id: 2, name: 'Cabaña 2 Roja', short: 'C2', type: 'small', pax: 4, color: '#dc2626', icon: '🏡', desc: refugioDesc, am: refugioAmenities },
+    { id: 3, name: 'Cabaña 3 Verde', short: 'C3', type: 'small', pax: 4, color: '#16a34a', icon: '🏡', desc: refugioDesc, am: refugioAmenities },
+    { id: 4, name: 'Casa AvA',       short: 'CASA', type: 'large', pax: 8, color: '#1e293b', icon: '🏠', desc: casaDesc, am: casaAmenities }
   ];
 
   for (const c of cabinsData) {
