@@ -140,6 +140,13 @@ router.get("/", async (req, res, next) => {
     const from = isDateOnly(req.query.from) ? req.query.from : null;
     const to = isDateOnly(req.query.to) ? req.query.to : null;
 
+    const dateWhere = [];
+    const dateParams = [];
+    const addDateParam = (value) => {
+      dateParams.push(value);
+      return `$${dateParams.length}`;
+    };
+
     const where = [];
     const params = [];
     const addParam = (value) => {
@@ -147,13 +154,16 @@ router.get("/", async (req, res, next) => {
       return `$${params.length}`;
     };
 
+    const shiftPlaceholders = (sql, offset) =>
+      sql.replace(/\$(\d+)/g, (_m, n) => `$${Number(n) + offset}`);
+
     // Rango principal por traslape (solo si se recibe período).
     if (from && to) {
-      where.push(`r.check_in <= ${addParam(to)}::date AND r.check_out >= ${addParam(from)}::date`);
+      dateWhere.push(`r.check_in <= ${addDateParam(to)}::date AND r.check_out >= ${addDateParam(from)}::date`);
     } else if (from) {
-      where.push(`r.check_out >= ${addParam(from)}::date`);
+      dateWhere.push(`r.check_out >= ${addDateParam(from)}::date`);
     } else if (to) {
-      where.push(`r.check_in <= ${addParam(to)}::date`);
+      dateWhere.push(`r.check_in <= ${addDateParam(to)}::date`);
     }
 
     const checkInFrom = isDateOnly(req.query.check_in_from) ? req.query.check_in_from : null;
@@ -161,10 +171,10 @@ router.get("/", async (req, res, next) => {
     const checkOutFrom = isDateOnly(req.query.check_out_from) ? req.query.check_out_from : null;
     const checkOutTo = isDateOnly(req.query.check_out_to) ? req.query.check_out_to : null;
 
-    if (checkInFrom) where.push(`r.check_in >= ${addParam(checkInFrom)}::date`);
-    if (checkInTo) where.push(`r.check_in <= ${addParam(checkInTo)}::date`);
-    if (checkOutFrom) where.push(`r.check_out >= ${addParam(checkOutFrom)}::date`);
-    if (checkOutTo) where.push(`r.check_out <= ${addParam(checkOutTo)}::date`);
+    if (checkInFrom) dateWhere.push(`r.check_in >= ${addDateParam(checkInFrom)}::date`);
+    if (checkInTo) dateWhere.push(`r.check_in <= ${addDateParam(checkInTo)}::date`);
+    if (checkOutFrom) dateWhere.push(`r.check_out >= ${addDateParam(checkOutFrom)}::date`);
+    if (checkOutTo) dateWhere.push(`r.check_out <= ${addDateParam(checkOutTo)}::date`);
 
     const source = nonEmptyString(req.query.source);
     if (source) where.push(`r.source = ${addParam(source)}`);
@@ -216,36 +226,58 @@ router.get("/", async (req, res, next) => {
       );
     }
 
-    const result = await query(
-      `SELECT
-         r.*,
-         g.full_name AS guest_name,
-         g.document_id AS guest_document,
-         c.name AS cabin_name,
-         c.nightly_rate AS cabin_nightly_rate,
-         GREATEST(0, (r.check_out - r.check_in))::int AS nights,
-         COALESCE(sales_totals.paid_amount, 0)::numeric(12,2) AS paid_amount,
-         GREATEST(r.total_amount - COALESCE(sales_totals.paid_amount, 0), 0)::numeric(12,2) AS amount_due,
-         CASE
-           WHEN COALESCE(sales_totals.paid_amount, 0) >= r.total_amount THEN 'paid'
-           WHEN COALESCE(sales_totals.paid_amount, 0) > 0 THEN 'partial'
-           ELSE 'pending'
-         END AS debt_status
-       FROM reservations r
-       JOIN guests g ON g.id = r.guest_id
-       LEFT JOIN cabins c ON c.id = r.cabin_id
-       LEFT JOIN (
-         SELECT reservation_id, SUM(amount) AS paid_amount
-         FROM sales
-         WHERE reservation_id IS NOT NULL
-           AND category = 'abono'
-         GROUP BY reservation_id
-       ) sales_totals ON sales_totals.reservation_id = r.id
-       ${where.length > 0 ? `WHERE ${where.join(" AND ")}` : ""}
-       ORDER BY r.check_in DESC, r.id DESC`,
-      params
-    );
-    res.json(result.rows);
+    const runQuery = async ({ whereParts, paramsArray }) => {
+      const result = await query(
+        `SELECT
+           r.*,
+           g.full_name AS guest_name,
+           g.document_id AS guest_document,
+           c.name AS cabin_name,
+           c.nightly_rate AS cabin_nightly_rate,
+           GREATEST(0, (r.check_out - r.check_in))::int AS nights,
+           COALESCE(sales_totals.paid_amount, 0)::numeric(12,2) AS paid_amount,
+           GREATEST(r.total_amount - COALESCE(sales_totals.paid_amount, 0), 0)::numeric(12,2) AS amount_due,
+           CASE
+             WHEN COALESCE(sales_totals.paid_amount, 0) >= r.total_amount THEN 'paid'
+             WHEN COALESCE(sales_totals.paid_amount, 0) > 0 THEN 'partial'
+             ELSE 'pending'
+           END AS debt_status
+         FROM reservations r
+         JOIN guests g ON g.id = r.guest_id
+         LEFT JOIN cabins c ON c.id = r.cabin_id
+         LEFT JOIN (
+           SELECT reservation_id, SUM(amount) AS paid_amount
+           FROM sales
+           WHERE reservation_id IS NOT NULL
+             AND category = 'abono'
+           GROUP BY reservation_id
+         ) sales_totals ON sales_totals.reservation_id = r.id
+         ${whereParts.length > 0 ? `WHERE ${whereParts.join(" AND ")}` : ""}
+         ORDER BY r.check_in DESC, r.id DESC`,
+        paramsArray
+      );
+      return result.rows;
+    };
+
+    const hasDateFilter = dateWhere.length > 0;
+
+    const combinedOffset = dateParams.length;
+    const combinedWhere = [...dateWhere, ...where.map((w) => shiftPlaceholders(w, combinedOffset))];
+    const combinedParams = [...dateParams, ...params];
+
+    let rows = await runQuery({ whereParts: combinedWhere, paramsArray: combinedParams });
+
+    // Fallback: si el filtro por fecha deja vacío, devolver resultados con el resto de filtros (sin tocar filtros no-fecha).
+    if (hasDateFilter && rows.length === 0) {
+      console.warn(
+        `[reservations] date filter returned 0; applying fallback without date filters`,
+        { from, to, checkInFrom, checkInTo, checkOutFrom, checkOutTo }
+      );
+      res.setHeader("X-Refugios-Fallback", "reservations_without_date_filters");
+      rows = await runQuery({ whereParts: where, paramsArray: params });
+    }
+
+    res.json(rows);
   } catch (error) {
     next(error);
   }
