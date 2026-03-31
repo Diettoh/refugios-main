@@ -543,8 +543,8 @@ function chip(label, className = "") {
   return `<span class="chip ${className}">${label}</span>`;
 }
 
-function deleteButton(type, id) {
-  return `<button type="button" class="btn-delete" data-delete-type="${type}" data-id="${id}">Eliminar</button>`;
+function deleteButton(type, id, label = "Eliminar") {
+  return `<button type="button" class="btn-delete" data-delete-type="${type}" data-id="${id}">${label}</button>`;
 }
 
 function editGuestButton(guest) {
@@ -1609,6 +1609,7 @@ async function loadAll() {
         <span class="record-id">#${row.id}</span>
       </div>
       <div class="record-meta">
+        ${row.status && row.status !== "confirmed" ? chip(`Estado ${row.status}`, row.status === "cancelled" ? "badge--ghost" : "badge--info") : ""}
         ${chip(`Canal/Pago ${formatChannelPaymentLabel(row.source, row.payment_method)}`)}
         ${chip(`Llega ${formatDate(row.check_in)}${row.check_in_time ? " " + String(row.check_in_time).slice(0, 5) : ""}`)}
         ${chip(`Sale ${formatDate(row.check_out)}${row.checkout_time ? " " + String(row.checkout_time).slice(0, 5) : ""}`)}
@@ -1624,7 +1625,7 @@ async function loadAll() {
         ${row.debt_status !== "paid" ? `<button type="button" class="btn btn--sm btn--primary" onclick="openSaleModalForReservation(${row.id}, ${Number(row.amount_due || 0)}, '${(row.guest_name || "").replace(/'/g, "\\'")}')">Abonar</button>` : ""}
         ${row.paid_amount == 0 && Number(row.total_amount) > 0 ? `<button type="button" class="btn btn--sm btn--ghost" onclick="migrateReservationPayment(${row.id}, '${(row.guest_name || "").replace(/'/g, "\\'")}')" title="Marcar como pagada (reserva antigua)">Migrar pago</button>` : ""}
         <button type="button" class="btn btn--sm btn--ghost btn-edit-reservation" data-reservation-id="${row.id}">Editar</button>
-        ${deleteButton("reservations", row.id)}
+        ${deleteButton("reservations", row.id, "Cancelar")}
       </div>
     </li>`);
 
@@ -1641,6 +1642,7 @@ async function loadAll() {
         <span class="record-id">#${row.id}</span>
       </div>
       <div class="record-meta">
+        ${row.status && row.status !== "issued" ? chip(`Estado ${row.status}`, "badge--ghost") : ""}
         ${chip(`Fecha ${formatDate(row.issue_date)}`)}
         ${chip(`Monto ${money.format(row.amount)}`)}
         ${row.reservation_id ? chip(`Reserva #${row.reservation_id}`) : ""}
@@ -1716,6 +1718,7 @@ function renderCabinsList(cabins) {
         nightlyRate > 0
           ? `<p class="cabin-record__price">Tarifa: ${money.format(nightlyRate)}</p>`
           : `<p class="cabin-record__price cabin-record__price--missing">Tarifa: no configurada</p>`;
+      const canDelete = !(Number.isInteger(cabin.id) && cabin.id >= 1 && cabin.id <= 4);
       return `<li class="record-item cabin-record">
         <div class="cabin-record__thumb">
           ${mainSrc ? `<img src="${mainSrc}" alt="${cabin.name}" />` : `<span class="house-icon">🏡</span>`}
@@ -1729,7 +1732,7 @@ function renderCabinsList(cabins) {
           <button type="button" class="btn btn--sm btn--ghost cabin-btn-edit-form" data-cabin-id="${cabin.id}">Editar Datos</button>
           <button type="button" class="btn btn--sm btn--ghost cabin-btn-gallery" data-cabin="${cabin.id}">Ver Fotos</button>
           <button type="button" class="btn btn--sm btn--ghost cabin-btn-edit" data-cabin="${cabin.id}">Gestionar Fotos</button>
-          ${deleteButton("cabins", cabin.id)}
+          ${canDelete ? deleteButton("cabins", cabin.id) : `<span class="chip badge--ghost" title="Cabañas operativas (1-4) no se eliminan.">Protegida</span>`}
         </div>
       </li>`;
     })
@@ -2312,15 +2315,33 @@ function bindDeleteButtons() {
     const { deleteType, id } = button.dataset;
     if (!deleteType || !id) return;
 
-    const confirmed = window.confirm(`Eliminar registro #${id}? Esta accion no se puede deshacer.`);
+    const actionLabel =
+      deleteType === "reservations"
+        ? "Cancelar"
+        : deleteType === "documents"
+          ? "Anular"
+          : "Eliminar";
+    const warning =
+      deleteType === "reservations"
+        ? "La reserva quedará en estado cancelled (recuperable)."
+        : deleteType === "documents"
+          ? "El documento quedará en estado voided (trazable)."
+          : "Esta accion no se puede deshacer.";
+    const confirmed = window.confirm(`${actionLabel} registro #${id}? ${warning}`);
     if (!confirmed) return;
 
-    setStatus("Eliminando...", "");
+    setStatus(`${actionLabel}...`, "");
 
     try {
       await api(`/api/${deleteType}/${id}`, { method: "DELETE" });
       await loadAll();
-      setStatus(`Registro #${id} eliminado`, "ok");
+      const doneLabel =
+        deleteType === "reservations"
+          ? "cancelada"
+          : deleteType === "documents"
+            ? "anulado"
+            : "eliminado";
+      setStatus(`Registro #${id} ${doneLabel}`, "ok");
     } catch (error) {
       setStatus(error.message, "error");
     }

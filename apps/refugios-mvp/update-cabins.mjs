@@ -1,9 +1,26 @@
 import pg from 'pg';
 const { Client } = pg;
 
+function getArgValue(flag) {
+  const argv = process.argv.slice(2);
+  const idx = argv.findIndex((a) => a === flag || a.startsWith(`${flag}=`));
+  if (idx === -1) return null;
+  const raw = argv[idx];
+  if (raw.includes("=")) return raw.split("=").slice(1).join("=");
+  return argv[idx + 1] || null;
+}
+
 async function run() {
+  const urlFromArgs = getArgValue("--url");
+  const connectionString =
+    urlFromArgs ||
+    process.env.DATABASE_URL ||
+    'postgresql://refugios:refugios_qa@localhost:5433/refugios';
+
+  const pruneExtra = process.argv.includes("--prune-extra");
+
   const db = new Client({
-    connectionString: 'postgresql://refugios:refugios_qa@localhost:5433/refugios'
+    connectionString
   });
   await db.connect();
 
@@ -37,10 +54,16 @@ async function run() {
     `, [c.id, c.name, c.desc, c.type, c.pax, c.short, c.color, c.icon, c.am]);
   }
 
-  await db.query(`DELETE FROM cabins WHERE id > 4`);
-  await db.query(`SELECT setval('cabins_id_seq', (SELECT MAX(id) FROM cabins))`);
+  if (pruneExtra) {
+    await db.query(`DELETE FROM cabins WHERE id > 4`);
+  }
 
-  console.log("Cabins updated successfully.");
+  const seqRes = await db.query(`SELECT to_regclass('public.cabins_id_seq') AS seq`);
+  if (seqRes.rows?.[0]?.seq) {
+    await db.query(`SELECT setval('cabins_id_seq', (SELECT MAX(id) FROM cabins))`);
+  }
+
+  console.log("Cabins ensured successfully.");
 
   const res = await db.query('SELECT id, name, short_code FROM cabins ORDER BY id');
   console.table(res.rows);

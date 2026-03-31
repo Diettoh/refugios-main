@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import crypto from "node:crypto";
 import usersRouter from "./routes/users.js";
 import guestsRouter from "./routes/guests.js";
 import reservationsRouter from "./routes/reservations.js";
@@ -42,7 +43,16 @@ app.get("/api/health/db", async (_req, res) => {
       "SELECT COUNT(*) AS n FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'schema_migrations'"
     );
     const hasMigrations = Number(r?.rows?.[0]?.n || 0) > 0;
-    return res.json({ db: "ok", migrations: hasMigrations });
+    const dbUrl = String(process.env.DATABASE_URL || "");
+    const dbFingerprint = dbUrl
+      ? crypto.createHash("sha256").update(dbUrl).digest("hex").slice(0, 12)
+      : "";
+    return res.json({
+      db: "ok",
+      migrations: hasMigrations,
+      db_fingerprint: dbFingerprint,
+      runtime: { node: process.version }
+    });
   } catch (err) {
     const code = err?.code || "";
     const msg =

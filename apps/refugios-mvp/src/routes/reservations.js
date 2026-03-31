@@ -952,11 +952,15 @@ router.delete("/:id", async (req, res, next) => {
   }
 
   try {
-    const result = await query("DELETE FROM reservations WHERE id = $1 RETURNING id", [id]);
+    // Soft delete: no borrar datos operativos. Cancelar la reserva para poder recuperarla si es necesario.
+    const result = await query(
+      "UPDATE reservations SET status = 'cancelled' WHERE id = $1 RETURNING id, status",
+      [id]
+    );
     if (result.rowCount === 0) {
       return res.status(404).json({ error: "Reserva no encontrada" });
     }
-    return res.json({ ok: true, id });
+    return res.json({ ok: true, id, status: result.rows[0].status });
   } catch (error) {
     return next(error);
   }

@@ -289,6 +289,22 @@ router.delete("/:id", async (req, res, next) => {
     return res.status(400).json({ error: "ID inválido" });
   }
   try {
+    // Protege cabañas operativas base (1..4) para evitar perder asignaciones históricas.
+    // Si se requiere "ocultar" una cabaña, hacerlo vía edición (nombre/sort_order) o agregar un flag de "archivada" (futuro).
+    if (id >= 1 && id <= 4) {
+      return res.status(409).json({
+        error: "No se puede eliminar una cabaña operativa (IDs 1-4). Usa 'Editar Datos'."
+      });
+    }
+
+    // Evita eliminar cabañas con reservas asociadas (aunque el FK sea ON DELETE SET NULL).
+    const hasReservations = await query("SELECT 1 FROM reservations WHERE cabin_id = $1 LIMIT 1", [id]);
+    if (hasReservations.rowCount > 0) {
+      return res.status(409).json({
+        error: "No se puede eliminar la cabaña porque tiene reservas asociadas. Reasigna o elimina esas reservas primero."
+      });
+    }
+
     const result = await query("DELETE FROM cabins WHERE id = $1 RETURNING id", [id]);
     if (result.rowCount === 0) {
       return res.status(404).json({ error: "Cabaña no encontrada" });
