@@ -1044,6 +1044,138 @@ h2.section__title {
   color: #b91c1c;
 }
 
+.calendar-timeline[hidden] {
+  display: none !important;
+}
+
+.calendar-timeline {
+  margin-top: 0.75rem;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 14px;
+  overflow: hidden;
+  background: rgba(15, 23, 42, 0.35);
+}
+
+.cal-tl {
+  --day-w: 28px;
+  --row-h: 26px;
+  display: grid;
+  grid-template-columns: 180px 1fr;
+}
+
+.cal-tl__header {
+  display: contents;
+}
+
+.cal-tl__spacer {
+  padding: 10px 12px;
+  color: rgba(226, 232, 240, 0.7);
+  font-size: 12px;
+  border-right: 1px solid rgba(148, 163, 184, 0.12);
+  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+  background: rgba(15, 23, 42, 0.92);
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.cal-tl__days {
+  overflow-x: auto;
+  overflow-y: hidden;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+  background: rgba(15, 23, 42, 0.92);
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.cal-tl__day-row {
+  display: flex;
+  min-width: fit-content;
+}
+
+.cal-tl__day {
+  width: var(--day-w);
+  padding: 10px 0;
+  text-align: center;
+  font-size: 12px;
+  color: rgba(148, 163, 184, 0.92);
+  border-left: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.cal-tl__lanes {
+  display: contents;
+}
+
+.cal-tl__lane-label {
+  padding: 10px 12px;
+  border-right: 1px solid rgba(148, 163, 184, 0.12);
+  border-bottom: 1px solid rgba(148, 163, 184, 0.08);
+  color: rgba(226, 232, 240, 0.92);
+  font-weight: 600;
+  font-size: 13px;
+  line-height: 1.15;
+}
+
+.cal-tl__lane-meta {
+  display: block;
+  color: rgba(148, 163, 184, 0.85);
+  font-weight: 500;
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.cal-tl__lane-track {
+  position: relative;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.08);
+  background:
+    repeating-linear-gradient(
+      to right,
+      rgba(148, 163, 184, 0.08) 0,
+      rgba(148, 163, 184, 0.08) 1px,
+      rgba(0, 0, 0, 0) 1px,
+      rgba(0, 0, 0, 0) var(--day-w)
+    );
+}
+
+.cal-tl__lane-inner {
+  position: relative;
+  min-width: fit-content;
+}
+
+.cal-tl__res {
+  position: absolute;
+  height: calc(var(--row-h) - 6px);
+  border-radius: 10px;
+  padding: 3px 8px;
+  font-size: 12px;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  background: rgba(37, 99, 235, 0.22);
+  color: rgba(241, 245, 249, 0.95);
+  cursor: pointer;
+}
+
+.cal-tl__res:hover {
+  filter: brightness(1.06);
+}
+
+.cal-tl__res.is-muted {
+  background: rgba(148, 163, 184, 0.14);
+  border-color: rgba(148, 163, 184, 0.22);
+  color: rgba(226, 232, 240, 0.85);
+}
+
+.cal-tl__res.is-cancelled {
+  opacity: 0.55;
+  text-decoration: line-through;
+}
+
 .calendar-grid.is-pdf .calendar-day__num {
   color: rgba(15, 23, 42, 0.62);
   font-size: 0.9rem;

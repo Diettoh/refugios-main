@@ -1131,11 +1131,216 @@ function getCalendarCabins(cabins) {
   return getOperationalCabins(cabins || []).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
 }
 
+function getMonthRange(yy, mm) {
+  const firstDay = new Date(Date.UTC(yy, mm - 1, 1));
+  const lastDay = new Date(Date.UTC(yy, mm, 0));
+  const startKey = firstDay.toISOString().slice(0, 10);
+  const endKey = lastDay.toISOString().slice(0, 10);
+  const daysInMonth = lastDay.getUTCDate();
+  return { startKey, endKey, daysInMonth };
+}
+
+function clampReservationToRange(reservation, rangeStartKey, rangeEndKey) {
+  const start = toDateKey(reservation.check_in);
+  const end = toDateKey(reservation.check_out);
+  if (!start || !end) return null;
+  // Intersección (rangos inclusivos, consistente con el calendario actual)
+  const clampedStart = start < rangeStartKey ? rangeStartKey : start;
+  const clampedEnd = end > rangeEndKey ? rangeEndKey : end;
+  if (clampedEnd < rangeStartKey || clampedStart > rangeEndKey) return null;
+  if (clampedEnd < clampedStart) return null;
+  return { start: clampedStart, end: clampedEnd };
+}
+
+function dateKeyDiffDays(fromKey, toKey) {
+  const fromTs = Date.parse(`${fromKey}T00:00:00Z`);
+  const toTs = Date.parse(`${toKey}T00:00:00Z`);
+  if (!Number.isFinite(fromTs) || !Number.isFinite(toTs)) return 0;
+  return Math.round((toTs - fromTs) / 86400000);
+}
+
+function packTimelineRows(items) {
+  // items: [{ startIdx, endIdx, ... }], rangos inclusivos
+  const rows = []; // lastEndIdx por fila
+  const placed = [];
+  const sorted = [...items].sort((a, b) => a.startIdx - b.startIdx || a.endIdx - b.endIdx || (a.id || 0) - (b.id || 0));
+
+  for (const item of sorted) {
+    let rowIndex = -1;
+    for (let i = 0; i < rows.length; i++) {
+      if (rows[i] < item.startIdx) {
+        rowIndex = i;
+        break;
+      }
+    }
+    if (rowIndex === -1) {
+      rowIndex = rows.length;
+      rows.push(item.endIdx);
+    } else {
+      rows[rowIndex] = item.endIdx;
+    }
+    placed.push({ ...item, rowIndex });
+  }
+
+  return { rowsCount: Math.max(1, rows.length), placed };
+}
+
+function renderCalendarTimeline(reservations) {
+  const mount = document.getElementById("calendar-timeline");
+  if (!mount) return;
+
+  const [yy, mm] = (state.calendarMonth || new Date().toISOString().slice(0, 7)).split("-").map(Number);
+  const { startKey, endKey, daysInMonth } = getMonthRange(yy, mm);
+  const dayW = 28;
+  const rowH = 26;
+  const totalDays = daysInMonth;
+  const totalWidth = totalDays * dayW;
+
+  const cabins = getCalendarCabins(state.cabins);
+  const cabinById = new Map(cabins.map((c) => [Number(c.id), c]));
+
+  const scoped = (reservations || []).filter((r) => {
+    if (!r) return false;
+    if (r.status === "cancelled") return false;
+    const hit = clampReservationToRange(r, startKey, endKey);
+    return Boolean(hit);
+  });
+
+  const nullCabinReservations = scoped.filter((r) => !Number.isInteger(r.cabin_id));
+  const lanes = [
+    ...cabins.map((c) => ({ id: Number(c.id), name: c.name || `Cabaña #${c.id}`, cabin: c })),
+    ...(nullCabinReservations.length > 0 ? [{ id: null, name: "Sin cabaña", cabin: null }] : [])
+  ];
+
+  const headerDaysHtml = Array.from({ length: daysInMonth }, (_, i) => {
+    const d = i + 1;
+    return `<div class="cal-tl__day">${d}</div>`;
+  }).join("");
+
+  const laneHtml = lanes
+    .map((lane) => {
+      const laneId = lane.id;
+      const laneReservations = scoped.filter((r) => (laneId == null ? !Number.isInteger(r.cabin_id) : Number(r.cabin_id) === laneId));
+
+      const items = laneReservations
+        .map((r) => {
+          const hit = clampReservationToRange(r, startKey, endKey);
+          if (!hit) return null;
+          const startIdx = dateKeyDiffDays(startKey, hit.start);
+          const endIdx = dateKeyDiffDays(startKey, hit.end);
+          if (endIdx < 0 || startIdx > daysInMonth - 1) return null;
+          return { ...r, startIdx, endIdx };
+        })
+        .filter(Boolean);
+
+      const { rowsCount, placed } = packTimelineRows(items);
+      const heightPx = rowsCount * rowH;
+
+      const meta = lane.cabin
+        ? `${lane.cabin.size_category === "large" ? "Casa · " : "Refugio · "}${getCabinCapacity(lane.cabin)} pax`
+        : "Reservas sin cabaña asignada";
+
+      const bars = placed
+        .map((r) => {
+          const left = r.startIdx * dayW;
+          const width = Math.max(dayW, (r.endIdx - r.startIdx + 1) * dayW);
+          const top = r.rowIndex * rowH + 3;
+          const guest = String(r.guest_name || "").trim() || "Sin nombre";
+          const pax = Number(r.guests_count) || 1;
+          const label = `${guest.toUpperCase()} X${pax}`;
+
+          const cabin = lane.cabin || cabinById.get(Number(r.cabin_id));
+          const cabinIndex = cabins.findIndex((c) => Number(c.id) === Number(r.cabin_id));
+          const palette = cabin ? getCalendarCabinPalette(cabin, cabinIndex) : null;
+          const bg = palette?.soft || "rgba(148, 163, 184, 0.14)";
+          const border = palette?.border || "rgba(148, 163, 184, 0.22)";
+          const text = palette?.text || "rgba(226, 232, 240, 0.9)";
+
+          const classes = ["cal-tl__res"];
+          if (!Number.isInteger(r.cabin_id)) classes.push("is-muted");
+          if (r.status === "cancelled") classes.push("is-cancelled");
+
+          const title = `#${r.id} · ${formatDate(r.check_in)} → ${formatDate(r.check_out)}`;
+          return `<div class="${classes.join(" ")}" data-res-id="${r.id}"
+            style="left:${left}px;top:${top}px;width:${width}px;background:${bg};border-color:${border};color:${text}"
+            title="${title}">${label}</div>`;
+        })
+        .join("");
+
+      return `
+        <div class="cal-tl__lane-label">
+          <span>${lane.name}</span>
+          <span class="cal-tl__lane-meta">${meta}</span>
+        </div>
+        <div class="cal-tl__lane-track">
+          <div class="cal-tl__lane-inner" style="width:${totalWidth}px;min-height:${heightPx}px">
+            ${bars}
+          </div>
+        </div>
+      `;
+    })
+    .join("");
+
+  mount.innerHTML = `
+    <div class="cal-tl">
+      <div class="cal-tl__spacer">Reservas · ${MONTH_NAMES[mm - 1]} ${yy}</div>
+      <div class="cal-tl__days"><div class="cal-tl__day-row" style="width:${totalWidth}px">${headerDaysHtml}</div></div>
+      <div class="cal-tl__lanes">${laneHtml}</div>
+    </div>
+  `;
+
+  // Scroll sync (header + lanes)
+  const daysScroller = mount.querySelector(".cal-tl__days");
+  const laneScrollers = [...mount.querySelectorAll(".cal-tl__lane-track")];
+  if (daysScroller && laneScrollers.length > 0) {
+    let syncing = false;
+    const syncTo = (left) => {
+      if (syncing) return;
+      syncing = true;
+      daysScroller.scrollLeft = left;
+      laneScrollers.forEach((el) => {
+        el.scrollLeft = left;
+      });
+      syncing = false;
+    };
+    daysScroller.addEventListener("scroll", () => syncTo(daysScroller.scrollLeft));
+    laneScrollers.forEach((el) => el.addEventListener("scroll", () => syncTo(el.scrollLeft)));
+  }
+
+  // Click abre editor (si existe)
+  mount.querySelectorAll(".cal-tl__res[data-res-id]").forEach((el) => {
+    el.addEventListener("click", () => {
+      const id = Number(el.dataset.resId);
+      if (!Number.isInteger(id) || id <= 0) return;
+      if (typeof openReservationEditor === "function") {
+        openReservationEditor(id);
+        return;
+      }
+      const any = scoped.find((r) => Number(r.id) === id);
+      if (any?.check_in) {
+        state.availabilityDate = toDateKey(any.check_in);
+        const dateInput = document.getElementById("availability-date");
+        if (dateInput) dateInput.value = state.availabilityDate;
+        loadAll();
+      }
+    });
+  });
+}
+
 function renderCalendar(reservations) {
   const container = document.getElementById("calendar-days");
+  const timeline = document.getElementById("calendar-timeline");
   const titleEl = document.getElementById("calendar-title");
   const gridEl = document.getElementById("calendar-grid");
-  if (!container || !titleEl) return;
+  if (!titleEl) return;
+
+  if (gridEl) gridEl.hidden = state.calendarView === "timeline";
+  if (timeline) timeline.hidden = state.calendarView !== "timeline";
+  if (state.calendarView === "timeline") {
+    renderCalendarTimeline(reservations);
+    return;
+  }
+  if (!container) return;
 
   const cabins = getCalendarCabins(state.cabins);
   const totalCabins = Math.max(1, cabins.length);
@@ -1209,11 +1414,18 @@ function setupCalendarControls() {
 
   if (viewBtn) {
     const applyLabel = () => {
-      viewBtn.textContent = state.calendarView === "pdf" ? "Vista panel" : "Vista PDF";
+      const nextLabelByView = {
+        panel: "Vista timeline",
+        timeline: "Vista PDF",
+        pdf: "Vista panel"
+      };
+      viewBtn.textContent = nextLabelByView[state.calendarView] || "Vista timeline";
     };
     applyLabel();
     viewBtn.addEventListener("click", () => {
-      state.calendarView = state.calendarView === "pdf" ? "panel" : "pdf";
+      const order = ["panel", "timeline", "pdf"];
+      const idx = Math.max(0, order.indexOf(state.calendarView));
+      state.calendarView = order[(idx + 1) % order.length];
       window.localStorage.setItem("calendar_view", state.calendarView);
       applyLabel();
       loadAll();
