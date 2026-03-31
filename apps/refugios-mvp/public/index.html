@@ -515,10 +515,6 @@
             <span class="stat-card__number" id="expenses-kpi-count">0</span>
             <span class="stat-card__label">Registros</span>
           </div>
-          <div class="stat-card">
-            <span class="stat-card__number" id="expenses-kpi-average">$0</span>
-            <span class="stat-card__label">Promedio</span>
-          </div>
         </div>
 
         <div class="section-filters">
@@ -864,6 +860,7 @@
           <button class="modal__close" data-modal-close aria-label="Cerrar">&times;</button>
         </div>
         <form id="expense-form" class="modal__form">
+          <input type="hidden" name="id" />
           <div class="form-row">
             <label class="form-field">
               <span>Mes</span>

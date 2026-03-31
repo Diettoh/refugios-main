@@ -354,8 +354,12 @@ function setupSectionModals() {
       }
       if (modalId === "expense-modal") {
         const form = document.getElementById("expense-form");
+        const title = modal?.querySelector(".modal__header h3");
+        if (title) title.textContent = "Registrar gasto";
         if (form) {
           form.reset();
+          const idEl = form.querySelector('[name="id"]');
+          if (idEl) idEl.value = "";
           const monthInput = form.querySelector('[name="expense_month"]');
           if (monthInput) monthInput.value = new Date().toISOString().slice(0, 7);
         }
@@ -762,13 +766,10 @@ function refreshExpenseCategoryInputOptions(rows) {
 function renderExpensesKpis(rows) {
   const total = rows.reduce((acc, row) => acc + Number(row.amount || 0), 0);
   const count = rows.length;
-  const average = count > 0 ? total / count : 0;
   const totalEl = document.getElementById("expenses-kpi-total");
   const countEl = document.getElementById("expenses-kpi-count");
-  const avgEl = document.getElementById("expenses-kpi-average");
   if (totalEl) totalEl.textContent = money.format(total);
   if (countEl) countEl.textContent = String(count);
-  if (avgEl) avgEl.textContent = money.format(average);
 }
 
 function getExpensesPagedRows(rows) {
@@ -808,7 +809,10 @@ function renderExpensesTable(rows) {
       <td>${formatExpenseCategoryLabel(row.category)}</td>
         <td>${paymentLabels[row.payment_method] || row.payment_method}</td>
         <td>${money.format(row.amount)}</td>
-        <td>${deleteButton("expenses", row.id)}</td>
+        <td>
+          <button type="button" class="btn btn--sm btn--ghost btn-edit-expense" data-expense-id="${row.id}">Editar</button>
+          ${deleteButton("expenses", row.id)}
+        </td>
       </tr>`
     )
     .join("");
@@ -2519,6 +2523,82 @@ function bindReservationEditButtons() {
   });
 }
 
+function openExpenseEditor(expenseId) {
+  const id = Number(expenseId);
+  if (!Number.isInteger(id) || id <= 0) return;
+  const row = (state.expenses || []).find((r) => Number(r.id) === id);
+  if (!row) {
+    setStatus(`Gasto #${id} no encontrado en memoria. Recargando...`, "");
+    loadAll();
+    return;
+  }
+
+  const modal = document.getElementById("expense-modal");
+  const form = document.getElementById("expense-form");
+  if (!modal || !form) return;
+
+  const title = modal.querySelector(".modal__header h3");
+  if (title) title.textContent = `Editar gasto #${id}`;
+
+  const monthKey = toDateKey(row.expense_date).slice(0, 7);
+  const setValue = (name, value) => {
+    const el = form.querySelector(`[name="${name}"]`);
+    if (el) el.value = value == null ? "" : String(value);
+  };
+
+  setValue("id", id);
+  setValue("expense_month", monthKey);
+  setValue("category", row.category || "");
+  setValue("payment_method", row.payment_method || "");
+  setValue("amount", row.amount != null ? Number(row.amount) : "");
+  setValue("supplier", row.supplier || "");
+  setValue("description", row.description || "");
+
+  openModal(modal);
+}
+
+function bindExpenseEditButtons() {
+  document.body.addEventListener("click", (event) => {
+    const button = event.target.closest(".btn-edit-expense");
+    if (!button) return;
+    const id = Number(button.dataset.expenseId);
+    openExpenseEditor(id);
+  });
+}
+
+function bindExpenseForm() {
+  const form = document.getElementById("expense-form");
+  const modal = document.getElementById("expense-modal");
+  if (!form) return;
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const payload = normalize(toPayload(form));
+    const expenseId = Number(payload.id);
+    delete payload.id;
+
+    const isEdit = Number.isInteger(expenseId) && expenseId > 0;
+    const endpoint = isEdit ? `/api/expenses/${expenseId}` : "/api/expenses";
+    const method = isEdit ? "PATCH" : "POST";
+
+    setStatus(isEdit ? "Actualizando gasto..." : "Guardando gasto...", "");
+
+    try {
+      await api(endpoint, { method, body: JSON.stringify(payload) });
+      form.reset();
+      if (modal) {
+        const title = modal.querySelector(".modal__header h3");
+        if (title) title.textContent = "Registrar gasto";
+      }
+      await loadAll();
+      closeModal(form.closest(".form-modal"));
+      setStatus(isEdit ? "Gasto actualizado" : "Gasto registrado", "ok");
+    } catch (error) {
+      setStatus(error.message, "error");
+    }
+  });
+}
+
 function bindDeleteButtons() {
   document.body.addEventListener("click", async (event) => {
     const button = event.target.closest(".btn-delete");
@@ -2977,12 +3057,12 @@ function bindExportButtons() {
 
 for (const [formId, endpoint, message] of [
   ["sale-form", "/api/sales", "Venta registrada"],
-  ["expense-form", "/api/expenses", "Gasto registrado"],
   ["document-form", "/api/documents", "Documento registrado"]
 ]) {
   bindForm(formId, endpoint, message);
 }
 
+bindExpenseForm();
 bindGuestForm();
 bindReservationGuestLookup();
 bindReservationForm();
@@ -2990,6 +3070,7 @@ bindReservationPricing();
 bindGuestEditButtons();
 bindGuestHistoryButtons();
 bindReservationEditButtons();
+bindExpenseEditButtons();
 bindDeleteButtons();
 bindCabinForm();
 bindCabinFormOpenButtons();
