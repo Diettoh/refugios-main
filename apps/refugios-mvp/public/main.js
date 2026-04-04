@@ -1826,6 +1826,7 @@ async function loadAll() {
       </div>
       <div class="record-meta">
         ${row.status && row.status !== "confirmed" ? chip(`Estado ${row.status}`, row.status === "cancelled" ? "badge--ghost" : "badge--info") : ""}
+        ${row.cabin_id ? chip(`🏠 ${row.cabin_name || "Cabaña #" + row.cabin_id}`) : chip("Sin cabaña", "badge--ghost")}
         ${chip(`Canal/Pago ${formatChannelPaymentLabel(row.source, row.payment_method)}`)}
         ${chip(`Llega ${formatDate(row.check_in)}${row.check_in_time ? " " + String(row.check_in_time).slice(0, 5) : ""}`)}
         ${chip(`Sale ${formatDate(row.check_out)}${row.checkout_time ? " " + String(row.checkout_time).slice(0, 5) : ""}`)}
@@ -1840,6 +1841,8 @@ async function loadAll() {
       <div class="record-actions">
         ${row.debt_status !== "paid" ? `<button type="button" class="btn btn--sm btn--primary" onclick="openSaleModalForReservation(${row.id}, ${Number(row.amount_due || 0)}, '${(row.guest_name || "").replace(/'/g, "\\'")}')">Abonar</button>` : ""}
         ${row.paid_amount == 0 && Number(row.total_amount) > 0 ? `<button type="button" class="btn btn--sm btn--ghost" onclick="migrateReservationPayment(${row.id}, '${(row.guest_name || "").replace(/'/g, "\\'")}')" title="Marcar como pagada (reserva antigua)">Migrar pago</button>` : ""}
+        <button type="button" class="btn btn--sm btn--ghost btn-change-guest" data-reservation-id="${row.id}" title="Cambiar huésped vinculado">Huésped</button>
+        <button type="button" class="btn btn--sm btn--ghost btn-change-cabin" data-reservation-id="${row.id}" title="Cambiar cabaña asignada">Cabaña</button>
         <button type="button" class="btn btn--sm btn--ghost btn-edit-reservation" data-reservation-id="${row.id}">Editar</button>
         ${deleteButton("reservations", row.id, "Cancelar")}
       </div>
@@ -2523,6 +2526,151 @@ function bindReservationEditButtons() {
   });
 }
 
+function openChangeCabinModal(reservationId) {
+  const reservation = (state.reservations || []).find((r) => Number(r.id) === reservationId);
+  if (!reservation) return;
+
+  const modal = document.getElementById("change-cabin-modal");
+  const form = document.getElementById("change-cabin-form");
+  const select = document.getElementById("change-cabin-select");
+  if (!modal || !form || !select) return;
+
+  const title = modal.querySelector("#change-cabin-modal-title");
+  if (title) title.textContent = `Cambiar cabaña — Reserva #${reservationId} (${reservation.guest_name || "huésped"})`;
+
+  form.querySelector('[name="reservation_id"]').value = String(reservationId);
+
+  select.innerHTML =
+    '<option value="">Seleccionar cabaña</option>' +
+    getOperationalCabins(state.cabins)
+      .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
+      .map((c) => `<option value="${c.id}"${c.id === reservation.cabin_id ? " selected" : ""}>${c.name || c.short_code || "#" + c.id}</option>`)
+      .join("");
+
+  openModal(modal);
+}
+
+function bindChangeCabinButtons() {
+  document.body.addEventListener("click", (event) => {
+    const button = event.target.closest(".btn-change-cabin");
+    if (!button) return;
+    const reservationId = Number(button.dataset.reservationId);
+    if (!Number.isInteger(reservationId) || reservationId <= 0) return;
+    openChangeCabinModal(reservationId);
+  });
+
+  const form = document.getElementById("change-cabin-form");
+  if (!form) return;
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const reservationId = Number(form.querySelector('[name="reservation_id"]').value);
+    const cabinId = Number(form.querySelector('[name="cabin_id"]').value);
+
+    if (!Number.isInteger(reservationId) || reservationId <= 0) return;
+    if (!Number.isInteger(cabinId) || cabinId <= 0) {
+      setStatus("Selecciona una cabaña válida.", "error");
+      return;
+    }
+
+    setStatus("Actualizando cabaña...", "");
+    try {
+      await api(`/api/reservations/${reservationId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ cabin_id: cabinId })
+      });
+      closeModal(form.closest(".form-modal"));
+      await loadAll();
+      setStatus("Cabaña actualizada", "ok");
+    } catch (error) {
+      setStatus(error.message, "error");
+    }
+  });
+}
+
+function openChangeGuestModal(reservationId) {
+  const reservation = (state.reservations || []).find((r) => Number(r.id) === reservationId);
+  if (!reservation) return;
+
+  const modal = document.getElementById("change-guest-modal");
+  const form = document.getElementById("change-guest-form");
+  const select = document.getElementById("change-guest-select");
+  const searchInput = document.getElementById("change-guest-search");
+  if (!modal || !form || !select || !searchInput) return;
+
+  const title = modal.querySelector("#change-guest-modal-title");
+  if (title) title.textContent = `Cambiar huésped — Reserva #${reservationId} (actual: ${reservation.guest_name || "desconocido"})`;
+
+  form.querySelector('[name="reservation_id"]').value = String(reservationId);
+  form.querySelector('[name="guest_id"]').value = "";
+  searchInput.value = "";
+
+  const allGuests = [...(state.guests || [])].sort((a, b) =>
+    String(a.full_name || "").localeCompare(String(b.full_name || ""))
+  );
+
+  const populateSelect = (filter) => {
+    const lower = String(filter || "").toLowerCase().trim();
+    const filtered = lower
+      ? allGuests.filter((g) => String(g.full_name || "").toLowerCase().includes(lower))
+      : allGuests;
+    select.innerHTML =
+      '<option value="">Seleccionar huésped</option>' +
+      filtered
+        .map((g) => {
+          const doc = g.document_id ? ` (${g.document_id})` : "";
+          const selected = Number(g.id) === Number(reservation.guest_id) ? " selected" : "";
+          return `<option value="${g.id}"${selected}>${g.full_name || "Sin nombre"}${doc} #${g.id}</option>`;
+        })
+        .join("");
+  };
+
+  populateSelect("");
+  searchInput.addEventListener("input", () => populateSelect(searchInput.value));
+
+  openModal(modal);
+}
+
+function bindChangeGuestButtons() {
+  document.body.addEventListener("click", (event) => {
+    const button = event.target.closest(".btn-change-guest");
+    if (!button) return;
+    const reservationId = Number(button.dataset.reservationId);
+    if (!Number.isInteger(reservationId) || reservationId <= 0) return;
+    openChangeGuestModal(reservationId);
+  });
+
+  const form = document.getElementById("change-guest-form");
+  if (!form) return;
+
+  const select = document.getElementById("change-guest-select");
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const reservationId = Number(form.querySelector('[name="reservation_id"]').value);
+    const guestId = Number(select?.value);
+
+    if (!Number.isInteger(reservationId) || reservationId <= 0) return;
+    if (!Number.isInteger(guestId) || guestId <= 0) {
+      setStatus("Selecciona un huésped válido.", "error");
+      return;
+    }
+
+    setStatus("Actualizando huésped...", "");
+    try {
+      await api(`/api/reservations/${reservationId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ guest_id: guestId })
+      });
+      closeModal(form.closest(".form-modal"));
+      await loadAll();
+      setStatus("Huésped actualizado", "ok");
+    } catch (error) {
+      setStatus(error.message, "error");
+    }
+  });
+}
+
 function openExpenseEditor(expenseId) {
   const id = Number(expenseId);
   if (!Number.isInteger(id) || id <= 0) return;
@@ -3070,6 +3218,8 @@ bindReservationPricing();
 bindGuestEditButtons();
 bindGuestHistoryButtons();
 bindReservationEditButtons();
+bindChangeCabinButtons();
+bindChangeGuestButtons();
 bindExpenseEditButtons();
 bindDeleteButtons();
 bindCabinForm();

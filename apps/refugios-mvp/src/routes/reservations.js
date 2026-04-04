@@ -825,7 +825,8 @@ router.patch("/:id", async (req, res, next) => {
     "reservation_document_type",
     "notes",
     "additional_charge",
-    "cabin_id"
+    "cabin_id",
+    "guest_id"
   ];
 
   const updates = [];
@@ -837,7 +838,7 @@ router.patch("/:id", async (req, res, next) => {
 
       let value = req.body[field];
 
-      if (field === "guests_count" || field === "cabin_id" || field === "nights") {
+      if (field === "guests_count" || field === "cabin_id" || field === "nights" || field === "guest_id") {
         if (value === "" || value === null) value = null;
         if (value !== null) {
           const n = Number(value);
@@ -910,6 +911,14 @@ router.patch("/:id", async (req, res, next) => {
     }
 
     const body = req.body || {};
+
+    if (body.guest_id != null && body.guest_id !== "") {
+      const guestCheck = await query(`SELECT id FROM guests WHERE id = $1`, [Number(body.guest_id)]);
+      if (guestCheck.rowCount === 0) {
+        return res.status(400).json({ error: "guest_id no existe" });
+      }
+    }
+
     if ((body.check_in != null && body.check_in !== "") || (body.check_out != null && body.check_out !== "")) {
       const fromDb = await query(`SELECT check_in, check_out FROM reservations WHERE id = $1`, [id]);
       if (fromDb.rowCount === 0) return res.status(404).json({ error: "reserva no encontrada" });
