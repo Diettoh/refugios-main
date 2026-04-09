@@ -106,6 +106,8 @@ const state = {
   availabilityDate: new Date().toISOString().slice(0, 10),
   calendarMonth: new Date().toISOString().slice(0, 7),
   calendarView: window.localStorage.getItem("calendar_view") || "panel",
+  calendarGuestQuery: window.localStorage.getItem("calendar_guest_query") || "",
+  salesPeriodBy: window.localStorage.getItem("sales_period_by") || "check_out",
   totalCabins: Number(localStorage.getItem("total_cabins") || 6),
   expensesFilterMonth: "",
   expensesFilterPayment: "",
@@ -131,7 +133,8 @@ const state = {
   reservationsFilterMaxNights: "",
   reservationsFilterDocType: "",
   documentsFilterType: "",
-  cabins: []
+  cabins: [],
+  calendarReservations: []
 };
 
 function getCabinVisualDefaults(cabin) {
@@ -196,6 +199,20 @@ function normalizeDocumentId(value) {
     .replace(/[.\s-]/g, "")
     .toUpperCase()
     .trim();
+}
+
+function normalizeSearchKey(value) {
+  return String(value || "")
+    .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase();
+}
+
+function addDaysToDateKey(dateKey, deltaDays) {
+  const ts = Date.parse(`${dateKey}T00:00:00Z`);
+  if (!Number.isFinite(ts)) return "";
+  return new Date(ts + deltaDays * 86400000).toISOString().slice(0, 10);
 }
 
 function applyTheme(theme) {
@@ -659,7 +676,7 @@ function filterRows(rows, dateField) {
 }
 
 function saleMatchesPeriod(row, from, to) {
-  const effectiveDate = toDateKey(row?.reservation_check_out || row?.effective_period_date || row?.sale_date);
+  const effectiveDate = toDateKey(row?.effective_period_date || row?.sale_date || row?.reservation_check_out || row?.reservation_check_in);
   if (effectiveDate) {
     if (from && effectiveDate < from) return false;
     if (to && effectiveDate > to) return false;
@@ -870,13 +887,24 @@ function isReservationActiveOnDate(reservation, day) {
   const checkOut = toDateKey(reservation?.check_out);
   if (!targetDay || !checkIn || !checkOut) return false;
   if (reservation.status === "cancelled") return false;
-  return checkIn <= targetDay && targetDay <= checkOut;
+  // Arriendo por noche: ocupa desde check_in (noche) hasta el día anterior a check_out.
+  // Ej: check_in=2026-04-06, check_out=2026-04-07 => 1 noche, ocupa solo el 06.
+  if (checkOut <= checkIn) return targetDay === checkIn;
+  return checkIn <= targetDay && targetDay < checkOut;
 }
 
 function renderAvailability(reservations) {
   const cabins = getOperationalCabins(state.cabins).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
   const total = cabins.length;
-  const active = reservations.filter((row) => isReservationActiveOnDate(row, state.availabilityDate));
+  const cabinOrder = new Map(cabins.map((c, idx) => [Number(c.id), idx]));
+  const active = reservations
+    .filter((row) => isReservationActiveOnDate(row, state.availabilityDate))
+    .sort((a, b) => {
+      const ia = cabinOrder.has(Number(a.cabin_id)) ? cabinOrder.get(Number(a.cabin_id)) : 9999;
+      const ib = cabinOrder.has(Number(b.cabin_id)) ? cabinOrder.get(Number(b.cabin_id)) : 9999;
+      if (ia !== ib) return ia - ib;
+      return dateWeight(a.check_in) - dateWeight(b.check_in) || (a.id || 0) - (b.id || 0);
+    });
   const occupiedCabinIds = new Set(active.map((r) => r.cabin_id).filter((id) => Number.isInteger(id)));
   const occupied = Math.min(occupiedCabinIds.size || active.length, total);
   const free = Math.max(total - occupied, 0);
@@ -921,9 +949,17 @@ function renderAvailability(reservations) {
       const rows = active
         .map((row) => {
           const cabin = cabins.find((c) => c.id === row.cabin_id) || null;
+          const selectedDate = state.availabilityDate;
+          const checkIn = toDateKey(row.check_in);
+          const checkOut = toDateKey(row.check_out);
+          const lastNight = checkOut ? addDaysToDateKey(checkOut, -1) : "";
+          const isCheckIn = Boolean(selectedDate && checkIn && selectedDate === checkIn);
+          const isLastNight = Boolean(selectedDate && lastNight && selectedDate === lastNight);
           return `<li class="record-item">
             <div class="record-main">
               <span class="record-title">
+                ${isCheckIn ? `<span class="calendar-flag is-in" title="Check-in hoy">IN</span>` : ""}
+                ${isLastNight ? `<span class="calendar-flag is-out" title="Última noche — sale mañana">OUT</span>` : ""}
                 ${cabin ? cabinBadge(cabin) : ""}
                 <span class="record-title__guest">${row.guest_name}</span>
               </span>
@@ -971,7 +1007,7 @@ function renderOccupancyTimeline(reservations) {
         r.cabin_id === cabin.id && 
         r.status !== "cancelled" &&
         toDateKey(r.check_in) <= dateKey && 
-        dateKey <= toDateKey(r.check_out)
+        dateKey < toDateKey(r.check_out)
       );
 
       const isOccupied = activeOnDay.length > 0;
@@ -1024,7 +1060,9 @@ function getOccupancyForDate(reservations, dateKey, totalCabins, allowedCabinIds
     if (r.status === "cancelled") return false;
     const checkIn = toDateKey(r.check_in);
     const checkOut = toDateKey(r.check_out);
-    return checkIn && checkOut && checkIn <= dateKey && dateKey <= checkOut;
+    if (!checkIn || !checkOut) return false;
+    if (checkOut <= checkIn) return checkIn === dateKey;
+    return checkIn <= dateKey && dateKey < checkOut;
   });
   const scoped = allowedCabinIds
     ? active.filter((r) => Number.isInteger(r.cabin_id) && allowedCabinIds.has(r.cabin_id))
@@ -1040,7 +1078,9 @@ function getActiveReservationsForDate(reservations, dateKey) {
     if (r.status === "cancelled") return false;
     const checkIn = toDateKey(r.check_in);
     const checkOut = toDateKey(r.check_out);
-    return checkIn && checkOut && checkIn <= dateKey && dateKey <= checkOut;
+    if (!checkIn || !checkOut) return false;
+    if (checkOut <= checkIn) return checkIn === dateKey;
+    return checkIn <= dateKey && dateKey < checkOut;
   });
 }
 
@@ -1073,18 +1113,68 @@ function getCalendarCabinPalette(cabin, idx = 0) {
   return idx === 0 ? paletteByKey["1"] : idx === 1 ? paletteByKey["2"] : idx === 2 ? paletteByKey["3"] : paletteByKey.casa;
 }
 
-function getDayGuestLines(activeReservations, cabins) {
-  const cabinById = new Map((cabins || []).map((c) => [Number(c.id), c]));
-  return activeReservations
-    .filter((row) => String(row.guest_name || "").trim())
-    .map((row) => {
-      const name = String(row.guest_name || "").trim().toUpperCase();
-      const guests = Number(row.guests_count) || 1;
-      const cabin = cabinById.get(Number(row.cabin_id));
-      const cabinIndex = (cabins || []).findIndex((item) => Number(item.id) === Number(row.cabin_id));
-      const palette = getCalendarCabinPalette(cabin, cabinIndex);
-      return { label: `${name} X${guests}`, color: palette.border, status: row.status, palette };
-    });
+function getDayGuestLines(activeReservations, cabins, dateKey) {
+  const cabinList = Array.isArray(cabins) ? cabins : [];
+  const cabinById = new Map(cabinList.map((c) => [Number(c.id), c]));
+  const targetKey = toDateKey(dateKey);
+
+  // Mapear reserva activa por cabaña (si por error llegan múltiples, dejamos la “mejor”).
+  const byCabinId = new Map();
+  for (const row of activeReservations || []) {
+    const cabinId = Number(row?.cabin_id);
+    if (!Number.isInteger(cabinId)) continue;
+    if (!cabinById.has(cabinId)) continue;
+    const guestName = String(row?.guest_name || "").trim();
+    if (!guestName) continue;
+
+    const prev = byCabinId.get(cabinId);
+    if (!prev) {
+      byCabinId.set(cabinId, row);
+      continue;
+    }
+
+    const prevConfirmed = prev.status === "confirmed";
+    const nextConfirmed = row.status === "confirmed";
+    if (prevConfirmed !== nextConfirmed) {
+      if (nextConfirmed) byCabinId.set(cabinId, row);
+      continue;
+    }
+
+    // Estable: preferir la que parte antes (check_in) y luego el id.
+    const prevW = dateWeight(prev.check_in);
+    const nextW = dateWeight(row.check_in);
+    if (nextW < prevW || (nextW === prevW && Number(row.id || 0) < Number(prev.id || 0))) {
+      byCabinId.set(cabinId, row);
+    }
+  }
+
+  // IMPORTANTE: mantener la misma cantidad y orden de filas por día para que “se alineen”
+  // los nombres entre días (una fila por cabaña, con placeholders vacíos).
+  return cabinList.map((cabin, idx) => {
+    const cabinId = Number(cabin.id);
+    const row = byCabinId.get(cabinId) || null;
+    const palette = getCalendarCabinPalette(cabin, idx);
+    if (!row) return { label: "", status: "", palette, cabinIndex: idx, isEmpty: true };
+
+    const rawName = String(row.guest_name || "").trim();
+    const name = rawName.toUpperCase();
+    const guests = Number(row.guests_count) || 1;
+    const checkIn = toDateKey(row.check_in);
+    const checkOut = toDateKey(row.check_out);
+    const lastNight = checkOut ? addDaysToDateKey(checkOut, -1) : "";
+    const isCheckIn = Boolean(targetKey && checkIn && targetKey === checkIn);
+    const isLastNight = Boolean(targetKey && lastNight && targetKey === lastNight);
+    return {
+      label: `${name} X${guests}`,
+      guestKey: normalizeSearchKey(rawName),
+      status: row.status,
+      palette,
+      cabinIndex: idx,
+      isCheckIn,
+      isLastNight,
+      isEmpty: false
+    };
+  });
 }
 
 function renderDayCabinChips(cabins, activeReservations) {
@@ -1106,19 +1196,34 @@ function renderCalendarDay(dateKey, dayLabel, dayClasses, reservations, cabins, 
     .filter((r) => Number.isInteger(r.cabin_id) && allowedCabinIds.has(r.cabin_id));
   const occ = getOccupancyForDate(reservations, dateKey, totalCabins, allowedCabinIds);
   const occClass = occ.pct >= 100 ? "is-full" : occ.pct > 0 ? "is-partial" : "is-free";
-  const guests = getDayGuestLines(active, cabins);
+  const guests = getDayGuestLines(active, cabins, dateKey);
   const isPdf = state.calendarView === "pdf";
+  const query = normalizeSearchKey(state.calendarGuestQuery);
   const guestHtml = guests.length
     ? guests
-        .map(
-          (line) => {
-            const confirmedClass = isPdf && line.status === "confirmed" ? " is-confirmed" : "";
-            if (isPdf) {
-              return `<span class="calendar-guest-row${confirmedClass}" style="background:${line.palette.bg};color:${line.palette.text};border-left:4px solid ${line.palette.border}">${line.label}</span>`;
-            }
-            return `<span class="calendar-guest-row" style="border-left-color:${line.palette.border};background:${line.palette.soft}">${line.label}</span>`;
+        .map((line) => {
+          if (!line || !line.label) return `<span class="calendar-guest-row is-empty"></span>`;
+          const isFiltering = Boolean(query);
+          const isMatch = !isFiltering || (line.guestKey && line.guestKey.includes(query));
+          const classes = ["calendar-guest-row"];
+          if (isPdf && line.status === "confirmed") classes.push("is-confirmed");
+          if (isFiltering && !isMatch) classes.push("is-dim");
+          if (isFiltering && isMatch) classes.push("is-match");
+
+          const flags = [];
+          if (line.isCheckIn) flags.push(`<span class="calendar-flag is-in" title="Check-in">IN</span>`);
+          if (line.isLastNight) flags.push(`<span class="calendar-flag is-out" title="Última noche (sale mañana)">OUT</span>`);
+
+          if (isPdf) {
+            const pdfColor = line.status === "confirmed" ? "#b91c1c" : line.palette.text;
+            return `<span class="${classes.join(" ")}" style="background:${line.palette.bg};color:${pdfColor};border-left:4px solid ${line.palette.border}">
+              ${flags.join("")}<span class="calendar-guest-row__text">${line.label}</span>
+            </span>`;
           }
-        )
+          return `<span class="${classes.join(" ")}" style="border-left-color:${line.palette.border};background:${line.palette.soft}">
+            ${flags.join("")}<span class="calendar-guest-row__text">${line.label}</span>
+          </span>`;
+        })
         .join("")
     : `<span class="calendar-guest-row is-empty"></span>`;
   return `<button type="button" class="calendar-day ${dayClasses} ${occClass}" data-date="${dateKey}">
@@ -1146,9 +1251,11 @@ function getMonthRange(yy, mm) {
 
 function clampReservationToRange(reservation, rangeStartKey, rangeEndKey) {
   const start = toDateKey(reservation.check_in);
-  const end = toDateKey(reservation.check_out);
-  if (!start || !end) return null;
-  // Intersección (rangos inclusivos, consistente con el calendario actual)
+  const endExclusive = toDateKey(reservation.check_out);
+  if (!start || !endExclusive) return null;
+  // Arriendo por noche: el bloque ocupa hasta la última noche (check_out - 1 día).
+  const end = endExclusive <= start ? start : addDaysToDateKey(endExclusive, -1);
+  // Intersección (rangos inclusivos)
   const clampedStart = start < rangeStartKey ? rangeStartKey : start;
   const clampedEnd = end > rangeEndKey ? rangeEndKey : end;
   if (clampedEnd < rangeStartKey || clampedStart > rangeEndKey) return null;
@@ -1193,6 +1300,7 @@ function renderCalendarTimeline(reservations) {
   const mount = document.getElementById("calendar-timeline");
   if (!mount) return;
 
+  const guestQuery = normalizeSearchKey(state.calendarGuestQuery);
   const [yy, mm] = (state.calendarMonth || new Date().toISOString().slice(0, 7)).split("-").map(Number);
   const { startKey, endKey, daysInMonth } = getMonthRange(yy, mm);
   const dayW = 28;
@@ -1263,6 +1371,7 @@ function renderCalendarTimeline(reservations) {
           const classes = ["cal-tl__res"];
           if (!Number.isInteger(r.cabin_id)) classes.push("is-muted");
           if (r.status === "cancelled") classes.push("is-cancelled");
+          if (guestQuery && !normalizeSearchKey(guest).includes(guestQuery)) classes.push("is-filtered");
 
           const title = `#${r.id} · ${formatDate(r.check_in)} → ${formatDate(r.check_out)}`;
           return `<div class="${classes.join(" ")}" data-res-id="${r.id}"
@@ -1348,6 +1457,10 @@ function renderCalendar(reservations) {
 
   const cabins = getCalendarCabins(state.cabins);
   const totalCabins = Math.max(1, cabins.length);
+  if (gridEl) {
+    gridEl.style.setProperty("--calendar-total-cabins", String(totalCabins));
+    gridEl.style.setProperty("--calendar-chip-cols", String(Math.min(4, totalCabins)));
+  }
 
   const [yy, mm] = (state.calendarMonth || new Date().toISOString().slice(0, 7)).split("-").map(Number);
   const firstDay = new Date(yy, mm - 1, 1);
@@ -1359,6 +1472,7 @@ function renderCalendar(reservations) {
 
   if (gridEl) {
     gridEl.classList.toggle("is-pdf", state.calendarView === "pdf");
+    gridEl.classList.toggle("is-filtering", Boolean(normalizeSearchKey(state.calendarGuestQuery)));
     const weekdaySpans = gridEl.querySelectorAll(".calendar-weekdays span");
     const labels = state.calendarView === "pdf"
       ? ["LU", "MAR", "MIÉ", "JUE", "VIE", "SÁB", "DOM"]
@@ -1398,6 +1512,7 @@ function setupCalendarControls() {
   const nextBtn = document.getElementById("calendar-next");
   const dateInput = document.getElementById("availability-date");
   const viewBtn = document.getElementById("calendar-view-toggle");
+  const guestSearch = document.getElementById("calendar-guest-search");
 
   if (prevBtn) {
     prevBtn.addEventListener("click", () => {
@@ -1433,6 +1548,15 @@ function setupCalendarControls() {
       window.localStorage.setItem("calendar_view", state.calendarView);
       applyLabel();
       loadAll();
+    });
+  }
+
+  if (guestSearch) {
+    guestSearch.value = state.calendarGuestQuery || "";
+    guestSearch.addEventListener("input", () => {
+      state.calendarGuestQuery = guestSearch.value || "";
+      window.localStorage.setItem("calendar_guest_query", state.calendarGuestQuery);
+      renderCalendar(state.calendarReservations || []);
     });
   }
 
@@ -1757,6 +1881,7 @@ async function loadAll() {
   state.expenses = expenses;
   state.expensesMeta = expensesMeta || { categories: [], category_options: [], category_labels: {} };
   state.reservations = reservations;
+  state.calendarReservations = wideReservations;
 
   const filteredReservations = reservations;
   const filteredSales = (state.periodFrom || state.periodTo)
@@ -3247,6 +3372,7 @@ const monthlyCharts = {};
 
 function setupSalesSection() {
   const periodType = document.getElementById("sales-period-type");
+  const periodBySelect = document.getElementById("sales-period-by");
   const monthSelect = document.getElementById("monthly-report-month");
   const yearSelect = document.getElementById("monthly-report-year");
   const quarterSelect = document.getElementById("sales-quarter");
@@ -3260,6 +3386,16 @@ function setupSalesSection() {
   const categoryFilter = document.getElementById("sales-filter-category");
 
   if (!monthSelect || !yearSelect) return;
+
+  if (periodBySelect) {
+    const current = String(state.salesPeriodBy || "check_out");
+    periodBySelect.value = current;
+    periodBySelect.addEventListener("change", () => {
+      state.salesPeriodBy = periodBySelect.value || "check_out";
+      window.localStorage.setItem("sales_period_by", state.salesPeriodBy);
+      loadMonthlyReport();
+    });
+  }
 
   // Llenar select de cabañas (se llama también desde loadAll)
   window.refreshVentasCabinFilter = () => {
@@ -3303,7 +3439,8 @@ function setupSalesSection() {
     const cabin = cabinFilter?.value || "";
     const cat = categoryFilter?.value || "";
 
-    let salesUrl = `/api/sales?from=${from}&to=${to}`;
+    const periodBy = String(state.salesPeriodBy || "check_out");
+    let salesUrl = `/api/sales?from=${from}&to=${to}&period_by=${encodeURIComponent(periodBy)}`;
     if (guest) salesUrl += `&q=${encodeURIComponent(guest)}`;
     if (cabin) salesUrl += `&cabin_id=${cabin}`;
     if (cat) salesUrl += `&category=${cat}`;
@@ -3316,6 +3453,8 @@ function setupSalesSection() {
       setStatus("No se pudo cargar el informe", "error");
     }
   };
+
+  window.reloadSalesReport = loadMonthlyReport;
 
   updatePeriodVisibility();
   periodType?.addEventListener("change", () => {
@@ -3517,6 +3656,8 @@ function renderMonthlyTables(from, to, sales, expenses) {
     const cabin = cabinById.get(Number(row.cabin_id));
     const isCasa = getCabinCapacity(cabin) >= 8;
     const rc = isCasa ? "C" : "R";
+    const hasLink = row.reservation_id != null;
+    const guestLabel = row.guest_name || (hasLink ? "-" : "Sin reserva");
     if (row.category === "lodging") {
       const bucket = isCasa ? summary.casa : summary.refugios;
       bucket.count += 1;
@@ -3527,7 +3668,7 @@ function renderMonthlyTables(from, to, sales, expenses) {
     <tr>
       <td>${formatDate(row.effective_period_date || row.reservation_check_out || row.sale_date)}</td>
       <td>
-        <div><strong>${row.guest_name || "-"}</strong></div>
+        <div><strong>${guestLabel}</strong>${hasLink ? "" : " <span class=\"badge badge--ghost\" style=\"font-size:0.7em; margin-left:6px;\">manual</span>"}</div>
         <div style="font-size:0.8em; color:gray;">${rut}</div>
       </td>
       <td>
@@ -3550,6 +3691,7 @@ function renderMonthlyTables(from, to, sales, expenses) {
       <td>
         <div style="display:flex; gap:4px;">
           <button class="btn btn--ghost btn--sm" onclick="alert('${desc.replace(/'/g, "\\'")}')" title="Ver nota completa">Ver</button>
+          ${hasLink ? "" : `<button class="btn btn--ghost btn--sm" onclick="linkSaleToReservation(${Number(row.id || 0)})" title="Vincular a una reserva para mostrar huésped/cabaña/estadía">Vincular</button>`}
           ${deleteButton("sales", row.id)}
         </div>
       </td>
@@ -3622,6 +3764,32 @@ function channelLetter(source) {
   if (s === "other") return "O";
   return "";
 }
+
+window.linkSaleToReservation = async function linkSaleToReservation(saleId) {
+  if (!Number.isInteger(Number(saleId)) || Number(saleId) <= 0) return;
+  const raw = window.prompt("Ingresa el # de reserva para vincular esta venta (vacío para desvincular):", "");
+  if (raw === null) return;
+  const trimmed = String(raw).trim();
+  const reservation_id = trimmed === "" ? null : Number(trimmed);
+  if (trimmed !== "" && (!Number.isInteger(reservation_id) || reservation_id <= 0)) {
+    setStatus("Reserva inválida. Usa un número entero (ej: 123).", "error");
+    return;
+  }
+  try {
+    await api(`/api/sales/${saleId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ reservation_id })
+    });
+    if (typeof window.reloadSalesReport === "function") {
+      await window.reloadSalesReport();
+    } else {
+      await loadAll();
+    }
+    setStatus("Venta vinculada", "ok");
+  } catch (err) {
+    setStatus(err?.message || "No se pudo vincular la venta", "error");
+  }
+};
 
 function reservationNights(row) {
   const raw = Number(row?.nights);

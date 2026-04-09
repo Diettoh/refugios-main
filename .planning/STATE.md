@@ -53,7 +53,7 @@ Notes:
 | Decision | Rationale | Date |
 |----------|-----------|------|
 | No base prices per cabin | Owner wants manual rate entry per reservation; every reservation starts at $0 | Pre-existing |
-| Abonos deferred to v2 | Requires workflow clarification with German before model design | 2026-03-16 |
+| Abonos promovido a v1 | Germán confirmó: reserva → venta automática + gestión de abonos desde la misma UI | 2026-04-09 |
 | Utilidad formula must be confirmed before Phase 5 | Excel shows TOTAL vs UTILIDAD delta; unclear if Booking commission, fixed costs, or both | 2026-03-16 |
 | Migration via script (not UI) | 2 years of data; manual entry is not viable | Pre-existing |
 | Vanilla JS frontend — no bundler | Maintain consistency with existing SPA; avoid massive refactor | Pre-existing |
@@ -63,7 +63,7 @@ Notes:
 | Decision | Owner | Blocks |
 |----------|-------|--------|
 | Utilidad neta formula | German (client) | Phase 5 cannot start |
-| Abonos workflow (how German tracks partial payments today) | German (client) | v2 milestone |
+| ~~Abonos workflow~~ | ~~German (client)~~ | Resuelto 2026-04-09 — implementación en rama fix/billing-total-and-duplicate-records |
 | Monto oficial en Ventas (TOTAL vs UTILIDAD) | German (client) | Correct monthly totals + Phase 5 semantics |
 
 ### Known Blockers
@@ -104,7 +104,9 @@ High-priority items to keep in mind (not in scope for this milestone unless expl
 
 **Last session:** 2026-03-17 — UI `v0.9.6` deployed; RESERVAS 2026 imported and reconciled; prod cleaned of non-client test data.
 
-**Next action:** Import RESERVAS 2025 + align Ventas amount semantics after client validation (TOTAL vs UTILIDAD). Keep Phase 5 blocked until formula is confirmed in writing.
+**Next action:** Revisar implementación de abonos en rama `fix/billing-total-and-duplicate-records`, agregar tests y coordinar merge. Rama es la que está desplegada en Render — NO hacer merge a main hasta validar con Germán en prod.
+
+**Rama activa en Render:** `fix/billing-total-and-duplicate-records` (13 commits adelante de main)
 
 **Context for next session:**
 - Roadmap has 5 phases. Phase 1 is trivially small (commit uncommitted tarifa + noches changes and deploy).

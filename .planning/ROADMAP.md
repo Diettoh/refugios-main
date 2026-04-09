@@ -16,6 +16,7 @@
 - [ ] **Phase 3: Migración Histórica** - Import 2025 and 2026 historical data from PDFs into the database
 - [ ] **Phase 4: Dashboard Completo** - Monthly metrics, occupancy calendar, and reservation history with filters
 - [ ] **Phase 5: Utilidad Neta** - Net profit metric per month (pending formula validation with German)
+- [ ] **Phase 6: Abonos** - Partial payments per reservation with balance tracking and debt status
 
 ---
 
@@ -95,6 +96,21 @@ Plans:
 
 ---
 
+### Phase 6: Abonos
+**Goal**: El dueño puede registrar y gestionar pagos parciales por reserva; cada reserva muestra su saldo pendiente y estado de deuda
+**Depends on**: Phase 1 (schema limpio en prod)
+**Requirements**: PAY-01, PAY-02, PAY-03
+**Success Criteria** (what must be TRUE):
+  1. Al crear una reserva, se genera automáticamente una venta (`sales.category='lodging'`) vinculada
+  2. El dueño puede registrar abonos desde la tarjeta de reserva (monto, fecha)
+  3. El saldo pendiente (`total_amount - SUM(abonos)`) se muestra en la reserva
+  4. El estado de deuda (`pending` / `partial` / `paid`) se refleja visualmente
+  5. El dueño puede eliminar abonos con confirmación
+**Plans**: TBD
+**Note**: Implementación base ya existe en rama `fix/billing-total-and-duplicate-records` — requiere revisión, tests y merge.
+
+---
+
 ## Progress
 
 | Phase | Plans Complete | Status | Completed |
@@ -104,6 +120,7 @@ Plans:
 | 3. Migracion Historica | 0/? | Not started | - |
 | 4. Dashboard Completo | 0/? | Not started | - |
 | 5. Utilidad Neta | 0/? | Not started | - |
+| 6. Abonos | 0/? | In branch — pending merge | - |
 
 ---
 

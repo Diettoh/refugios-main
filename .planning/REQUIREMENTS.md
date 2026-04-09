@@ -26,15 +26,15 @@
 - [ ] **MIG-01**: Los datos de reservas históricas 2025 y 2026 del PDF `assets/RESERVAS 2025.pdf` y `RESERVAS 2026.pdf` son importados a la base de datos
 - [ ] **MIG-02**: Los datos financieros 2026 del PDF `assets/Ventas AvA 2026.pdf` (precio/noche, noches, total estadía, suplemento limpieza, fuente, tipo de documento) son importados y vinculados a las reservas correspondientes
 
-## v2 Requirements
-
 ### Payments — Abonos
 
-- **PAY-01**: El dueño puede registrar pagos parciales (abonos) por reserva con monto y fecha
-- **PAY-02**: El sistema muestra el saldo pendiente por cada reserva (total cobrado - suma de abonos)
-- **PAY-03**: El dueño puede ver un listado de reservas con saldo pendiente
+- [ ] **PAY-01**: El dueño puede registrar pagos parciales (abonos) por reserva con monto y fecha
+- [ ] **PAY-02**: El sistema muestra el saldo pendiente por cada reserva (total cobrado - suma de abonos)
+- [ ] **PAY-03**: El dueño puede ver un listado de reservas con saldo pendiente
 
-> **Note:** Abonos requiere definir con Germán cómo los gestiona actualmente (¿un Excel separado? ¿proceso en producción?) antes de diseñar el modelo de datos. Priorizar en el milestone siguiente.
+> **Unblocked 2026-04-09:** Germán confirmó el flujo — la reserva pasa automáticamente a venta y se gestionan abonos desde ahí. Implementación ya existe en rama `fix/billing-total-and-duplicate-records`.
+
+## v2 Requirements
 
 ### Expenses & Profitability
 
@@ -68,10 +68,13 @@
 | DASH-04 | Phase 5 | Pending |
 | MIG-01 | Phase 3 | Pending |
 | MIG-02 | Phase 3 | Pending |
+| PAY-01 | Phase 6 | Implemented in branch |
+| PAY-02 | Phase 6 | Implemented in branch |
+| PAY-03 | Phase 6 | Implemented in branch |
 
 **Coverage:**
-- v1 requirements: 12 total
-- Mapped to phases: 12/12
+- v1 requirements: 15 total
+- Mapped to phases: 15/15
 - Unmapped: 0 ✓
 
 ---
