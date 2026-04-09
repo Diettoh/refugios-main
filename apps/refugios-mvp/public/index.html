@@ -195,6 +195,10 @@
             <button type="button" class="btn btn--ghost btn--sm calendar-nav" id="calendar-prev" aria-label="Mes anterior">&larr;</button>
             <h3 class="calendar-title" id="calendar-title">Enero 2026</h3>
             <button type="button" class="btn btn--ghost btn--sm calendar-nav" id="calendar-next" aria-label="Mes siguiente">&rarr;</button>
+            <label class="calendar-search" title="Filtra el calendario por nombre de huésped">
+              <span class="sr-only">Filtrar huésped</span>
+              <input type="search" id="calendar-guest-search" placeholder="Filtrar huésped…" autocomplete="off" />
+            </label>
             <button type="button" class="btn btn--ghost btn--sm" id="calendar-view-toggle" title="Alternar vista tipo PDF del cliente">Vista PDF</button>
           </div>
           <div class="calendar-grid" id="calendar-grid">
@@ -389,6 +393,14 @@
                 <option value="suplemento">Suplemento</option>
                 <option value="limpieza">Limpieza</option>
                 <option value="otros">Otros</option>
+              </select>
+            </label>
+            <label class="filter-bar__field">
+              <span>Fecha ventas</span>
+              <select id="sales-period-by">
+                <option value="check_out">Salida (check-out)</option>
+                <option value="check_in">Llegada (check-in)</option>
+                <option value="sale_date">Pago (fecha venta)</option>
               </select>
             </label>
             <label class="filter-bar__field">
