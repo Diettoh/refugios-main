@@ -29,6 +29,17 @@ function parseBoolean(value) {
   return null;
 }
 
+function parsePeriodBy(value) {
+  const normalized = String(value || "")
+    .trim()
+    .toLowerCase();
+  if (!normalized) return "check_out";
+  if (["check_out", "checkout", "out"].includes(normalized)) return "check_out";
+  if (["check_in", "checkin", "in"].includes(normalized)) return "check_in";
+  if (["sale_date", "sale", "fecha_venta"].includes(normalized)) return "sale_date";
+  return null;
+}
+
 router.get("/meta", async (_req, res, next) => {
   try {
     const [categories, paymentMethods, sources] = await Promise.all([
@@ -71,30 +82,27 @@ router.get("/", async (req, res, next) => {
       return `$${params.length}`;
     };
 
+    const periodBy = parsePeriodBy(req.query.period_by);
+    if (!periodBy) {
+      return res.status(400).json({ error: "period_by invalido. Usa check_in, check_out o sale_date." });
+    }
+
+    const reservationPeriodField = periodBy === "check_in" ? "r.check_in" : "r.check_out";
+    const reservationPeriodExpr = periodBy === "sale_date" ? "s.sale_date" : reservationPeriodField;
+    const effectivePeriodExpr = `COALESCE(${reservationPeriodExpr}, s.sale_date)`;
+
     const from = isDateOnly(req.query.from) ? req.query.from : null;
     const to = isDateOnly(req.query.to) ? req.query.to : null;
     if (from && to) {
       const fromParam = addParam(from);
       const toParam = addParam(to);
-      where.push(`(
-        (r.id IS NOT NULL AND r.check_out >= ${fromParam}::date AND r.check_out <= ${toParam}::date)
-        OR
-        (r.id IS NULL AND s.sale_date >= ${fromParam}::date AND s.sale_date <= ${toParam}::date)
-      )`);
+      where.push(`${effectivePeriodExpr} >= ${fromParam}::date AND ${effectivePeriodExpr} <= ${toParam}::date`);
     } else if (from) {
       const fromParam = addParam(from);
-      where.push(`(
-        (r.id IS NOT NULL AND r.check_out >= ${fromParam}::date)
-        OR
-        (r.id IS NULL AND s.sale_date >= ${fromParam}::date)
-      )`);
+      where.push(`${effectivePeriodExpr} >= ${fromParam}::date`);
     } else if (to) {
       const toParam = addParam(to);
-      where.push(`(
-        (r.id IS NOT NULL AND r.check_out <= ${toParam}::date)
-        OR
-        (r.id IS NULL AND s.sale_date <= ${toParam}::date)
-      )`);
+      where.push(`${effectivePeriodExpr} <= ${toParam}::date`);
     }
 
     const category = nonEmptyString(req.query.category);
@@ -150,7 +158,7 @@ router.get("/", async (req, res, next) => {
          s.amount::numeric(12,2) AS amount,
          s.payment_method,
          s.sale_date,
-         COALESCE(r.check_out, s.sale_date) AS effective_period_date,
+         ${effectivePeriodExpr} AS effective_period_date,
          s.description,
          g.full_name AS guest_name,
          g.document_id AS guest_document,
@@ -172,7 +180,7 @@ router.get("/", async (req, res, next) => {
        LEFT JOIN guests g ON g.id = r.guest_id
        LEFT JOIN cabins c ON c.id = r.cabin_id
        ${where.length > 0 ? `WHERE ${where.join(" AND ")}` : ""}
-       ORDER BY COALESCE(r.check_out, s.sale_date) DESC, s.id DESC`,
+       ORDER BY ${effectivePeriodExpr} DESC, s.id DESC`,
       params
     );
     return res.json(result.rows);
@@ -271,6 +279,71 @@ router.delete("/:id", async (req, res, next) => {
       return res.status(404).json({ error: "Venta no encontrada" });
     }
     return res.json({ ok: true, id });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.patch("/:id", async (req, res, next) => {
+  const saleId = Number(req.params.id);
+  if (!Number.isInteger(saleId) || saleId <= 0) {
+    return res.status(400).json({ error: "id invalido" });
+  }
+
+  const body = req.body || {};
+  const isFullEdit = Object.prototype.hasOwnProperty.call(body, "amount");
+
+  try {
+    if (isFullEdit) {
+      // Edición completa: amount, payment_method, sale_date, category, description
+      const amount = body.amount != null ? Number(body.amount) : null;
+      if (amount == null || !Number.isFinite(amount) || amount < 0) {
+        return res.status(400).json({ error: "amount invalido" });
+      }
+      const paymentMethod = nonEmptyString(body.payment_method);
+      const saleDate = isDateOnly(body.sale_date) ? body.sale_date : null;
+      const category = nonEmptyString(body.category) || "lodging";
+      const description = body.description != null ? String(body.description).trim() || null : null;
+
+      if (!paymentMethod) return res.status(400).json({ error: "payment_method es requerido" });
+      if (!saleDate) return res.status(400).json({ error: "sale_date invalido" });
+
+      const updated = await query(
+        `UPDATE sales
+         SET amount = $2, payment_method = $3, sale_date = $4, category = $5, description = $6
+         WHERE id = $1
+         RETURNING id, reservation_id, category, amount, payment_method, sale_date, description`,
+        [saleId, amount, paymentMethod, saleDate, category, description]
+      );
+      if (updated.rowCount === 0) return res.status(404).json({ error: "Venta no encontrada" });
+      return res.json(updated.rows[0]);
+    }
+
+    // Vinculación a reserva (comportamiento original)
+    if (!Object.prototype.hasOwnProperty.call(body, "reservation_id")) {
+      return res.status(400).json({ error: "reservation_id es requerido" });
+    }
+
+    const rawReservationId = body.reservation_id;
+    const reservationId =
+      rawReservationId == null || String(rawReservationId).trim() === "" ? null : parseInteger(rawReservationId, { min: 1 });
+
+    if (rawReservationId != null && String(rawReservationId).trim() !== "" && reservationId == null) {
+      return res.status(400).json({ error: "reservation_id invalido" });
+    }
+
+    if (reservationId != null) {
+      const exists = await query("SELECT 1 FROM reservations WHERE id = $1", [reservationId]);
+      if (exists.rowCount === 0) return res.status(404).json({ error: "Reserva no encontrada" });
+    }
+
+    const updated = await query(
+      `UPDATE sales SET reservation_id = $2 WHERE id = $1
+       RETURNING id, reservation_id, category, amount, payment_method, sale_date, description`,
+      [saleId, reservationId]
+    );
+    if (updated.rowCount === 0) return res.status(404).json({ error: "Venta no encontrada" });
+    return res.json(updated.rows[0]);
   } catch (error) {
     return next(error);
   }

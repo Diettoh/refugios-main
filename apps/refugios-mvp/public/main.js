@@ -1253,8 +1253,8 @@ function clampReservationToRange(reservation, rangeStartKey, rangeEndKey) {
   const start = toDateKey(reservation.check_in);
   const endExclusive = toDateKey(reservation.check_out);
   if (!start || !endExclusive) return null;
-  // Arriendo por noche: el bloque ocupa hasta la última noche (check_out - 1 día).
-  const end = endExclusive <= start ? start : addDaysToDateKey(endExclusive, -1);
+  // El bloque ocupa desde check_in hasta check_out (inclusive) para que el día de salida sea visible.
+  const end = endExclusive <= start ? start : endExclusive;
   // Intersección (rangos inclusivos)
   const clampedStart = start < rangeStartKey ? rangeStartKey : start;
   const clampedEnd = end > rangeEndKey ? rangeEndKey : end;
@@ -2839,6 +2839,67 @@ function bindExpenseEditButtons() {
   });
 }
 
+function bindSaleForm() {
+  const form = document.getElementById("sale-form");
+  const modal = document.getElementById("sale-modal");
+  if (!form) return;
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const payload = normalize(toPayload(form));
+    const saleId = Number(payload.id);
+    delete payload.id;
+
+    const isEdit = Number.isInteger(saleId) && saleId > 0;
+    const endpoint = isEdit ? `/api/sales/${saleId}` : "/api/sales";
+    const method = isEdit ? "PATCH" : "POST";
+
+    setStatus(isEdit ? "Actualizando venta..." : "Guardando venta...", "");
+    try {
+      await api(endpoint, { method, body: JSON.stringify(payload) });
+      form.reset();
+      if (modal) {
+        const title = modal.querySelector(".modal__header h3");
+        if (title) title.textContent = "Registrar venta";
+      }
+      await loadAll();
+      if (window.reloadSalesReport) window.reloadSalesReport();
+      closeModal(modal);
+      setStatus(isEdit ? "Venta actualizada" : "Venta registrada", "ok");
+    } catch (error) {
+      setStatus(error.message, "error");
+    }
+  });
+}
+
+function openEditSaleModal(saleId) {
+  const modal = document.getElementById("sale-modal");
+  const form = document.getElementById("sale-form");
+  if (!modal || !form) return;
+
+  const sale = (state.sales || []).find(s => Number(s.id) === saleId);
+  if (!sale) {
+    setStatus("Venta no encontrada", "error");
+    return;
+  }
+
+  form.reset();
+  form.querySelector('[name="id"]').value = sale.id;
+  form.querySelector('[name="sale_date"]').value = toDateKey(sale.sale_date);
+  form.querySelector('[name="category"]').value = sale.category || "lodging";
+  form.querySelector('[name="payment_method"]').value = sale.payment_method || "";
+  form.querySelector('[name="amount"]').value = sale.amount || "";
+  const descInput = form.querySelector('[name="description"]');
+  if (descInput) descInput.value = sale.description || "";
+  const resInput = form.querySelector('[name="reservation_id"]');
+  if (resInput) resInput.value = sale.reservation_id || "";
+
+  const title = modal.querySelector(".modal__header h3");
+  if (title) title.textContent = `Editar venta #${sale.id}`;
+
+  openModal(modal);
+}
+
 function bindExpenseForm() {
   const form = document.getElementById("expense-form");
   const modal = document.getElementById("expense-modal");
@@ -3328,12 +3389,8 @@ function bindExportButtons() {
   }
 }
 
-for (const [formId, endpoint, message] of [
-  ["sale-form", "/api/sales", "Venta registrada"],
-  ["document-form", "/api/documents", "Documento registrado"]
-]) {
-  bindForm(formId, endpoint, message);
-}
+bindForm("document-form", "/api/documents", "Documento registrado");
+bindSaleForm();
 
 bindExpenseForm();
 bindGuestForm();
@@ -3691,6 +3748,7 @@ function renderMonthlyTables(from, to, sales, expenses) {
       <td>
         <div style="display:flex; gap:4px;">
           <button class="btn btn--ghost btn--sm" onclick="alert('${desc.replace(/'/g, "\\'")}')" title="Ver nota completa">Ver</button>
+          <button class="btn btn--ghost btn--sm" onclick="openEditSaleModal(${Number(row.id || 0)})">Editar</button>
           ${hasLink ? "" : `<button class="btn btn--ghost btn--sm" onclick="linkSaleToReservation(${Number(row.id || 0)})" title="Vincular a una reserva para mostrar huésped/cabaña/estadía">Vincular</button>`}
           ${deleteButton("sales", row.id)}
         </div>
@@ -3720,6 +3778,7 @@ function renderMonthlyTables(from, to, sales, expenses) {
       <td>
         <div style="display:flex; gap:4px;">
           <button class="btn btn--ghost btn--sm" onclick="alert('${desc.replace(/'/g, "\\'")}')" title="Ver nota completa">Ver</button>
+          <button class="btn btn--ghost btn--sm" onclick="openEditSaleModal(${Number(row.id || 0)})">Editar</button>
           ${deleteButton("sales", row.id)}
         </div>
       </td>
