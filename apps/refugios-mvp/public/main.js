@@ -107,7 +107,7 @@ const state = {
   calendarMonth: new Date().toISOString().slice(0, 7),
   calendarView: window.localStorage.getItem("calendar_view") || "panel",
   calendarGuestQuery: window.localStorage.getItem("calendar_guest_query") || "",
-  salesPeriodBy: window.localStorage.getItem("sales_period_by") || "check_out",
+  salesPeriodBy: window.localStorage.getItem("sales_period_by") || "check_in",
   totalCabins: Number(localStorage.getItem("total_cabins") || 6),
   expensesFilterMonth: "",
   expensesFilterPayment: "",
@@ -3445,10 +3445,10 @@ function setupSalesSection() {
   if (!monthSelect || !yearSelect) return;
 
   if (periodBySelect) {
-    const current = String(state.salesPeriodBy || "check_out");
+    const current = String(state.salesPeriodBy || "check_in");
     periodBySelect.value = current;
     periodBySelect.addEventListener("change", () => {
-      state.salesPeriodBy = periodBySelect.value || "check_out";
+      state.salesPeriodBy = periodBySelect.value || "check_in";
       window.localStorage.setItem("sales_period_by", state.salesPeriodBy);
       loadMonthlyReport();
     });
@@ -3496,7 +3496,7 @@ function setupSalesSection() {
     const cabin = cabinFilter?.value || "";
     const cat = categoryFilter?.value || "";
 
-    const periodBy = String(state.salesPeriodBy || "check_out");
+    const periodBy = String(state.salesPeriodBy || "check_in");
     let salesUrl = `/api/sales?from=${from}&to=${to}&period_by=${encodeURIComponent(periodBy)}`;
     if (guest) salesUrl += `&q=${encodeURIComponent(guest)}`;
     if (cabin) salesUrl += `&cabin_id=${cabin}`;
