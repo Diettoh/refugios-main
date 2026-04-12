@@ -951,14 +951,13 @@ function renderAvailability(reservations) {
           const selectedDate = state.availabilityDate;
           const checkIn = toDateKey(row.check_in);
           const checkOut = toDateKey(row.check_out);
-          const lastNight = checkOut ? addDaysToDateKey(checkOut, -1) : "";
           const isCheckIn = Boolean(selectedDate && checkIn && selectedDate === checkIn);
-          const isLastNight = Boolean(selectedDate && lastNight && selectedDate === lastNight);
+          const isLastNight = Boolean(selectedDate && checkOut && selectedDate === checkOut);
           return `<li class="record-item">
             <div class="record-main">
               <span class="record-title">
                 ${isCheckIn ? `<span class="calendar-flag is-in" title="Check-in hoy">IN</span>` : ""}
-                ${isLastNight ? `<span class="calendar-flag is-out" title="Última noche — sale mañana">OUT</span>` : ""}
+                ${isLastNight ? `<span class="calendar-flag is-out" title="Check-out">OUT</span>` : ""}
                 ${cabin ? cabinBadge(cabin) : ""}
                 <span class="record-title__guest">${row.guest_name}</span>
               </span>
@@ -1160,9 +1159,8 @@ function getDayGuestLines(activeReservations, cabins, dateKey) {
     const guests = Number(row.guests_count) || 1;
     const checkIn = toDateKey(row.check_in);
     const checkOut = toDateKey(row.check_out);
-    const lastNight = checkOut ? addDaysToDateKey(checkOut, -1) : "";
     const isCheckIn = Boolean(targetKey && checkIn && targetKey === checkIn);
-    const isLastNight = Boolean(targetKey && lastNight && targetKey === lastNight);
+    const isLastNight = Boolean(targetKey && checkOut && targetKey === checkOut);
     return {
       label: `${name} X${guests}`,
       guestKey: normalizeSearchKey(rawName),
@@ -1211,7 +1209,7 @@ function renderCalendarDay(dateKey, dayLabel, dayClasses, reservations, cabins, 
 
           const flags = [];
           if (line.isCheckIn) flags.push(`<span class="calendar-flag is-in" title="Check-in">IN</span>`);
-          if (line.isLastNight) flags.push(`<span class="calendar-flag is-out" title="Última noche (sale mañana)">OUT</span>`);
+          if (line.isLastNight) flags.push(`<span class="calendar-flag is-out" title="Check-out">OUT</span>`);
 
           if (isPdf) {
             const pdfColor = line.status === "confirmed" ? "#b91c1c" : line.palette.text;
