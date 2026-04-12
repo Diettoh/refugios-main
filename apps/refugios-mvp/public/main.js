@@ -107,7 +107,7 @@ const state = {
   calendarMonth: new Date().toISOString().slice(0, 7),
   calendarView: window.localStorage.getItem("calendar_view") || "panel",
   calendarGuestQuery: window.localStorage.getItem("calendar_guest_query") || "",
-  salesPeriodBy: window.localStorage.getItem("sales_period_by") || "check_in",
+  salesPeriodBy: "check_in",
   totalCabins: Number(localStorage.getItem("total_cabins") || 6),
   expensesFilterMonth: "",
   expensesFilterPayment: "",
