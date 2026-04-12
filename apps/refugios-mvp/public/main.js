@@ -1253,8 +1253,8 @@ function clampReservationToRange(reservation, rangeStartKey, rangeEndKey) {
   const start = toDateKey(reservation.check_in);
   const endExclusive = toDateKey(reservation.check_out);
   if (!start || !endExclusive) return null;
-  // El bloque ocupa desde check_in hasta check_out (inclusive) para que el día de salida sea visible.
-  const end = endExclusive <= start ? start : endExclusive;
+  // El bloque cubre check_in hasta check_out exclusive (igual que isReservationOccupyingDay).
+  const end = endExclusive <= start ? start : addDaysToDateKey(endExclusive, -1);
   // Intersección (rangos inclusivos)
   const clampedStart = start < rangeStartKey ? rangeStartKey : start;
   const clampedEnd = end > rangeEndKey ? rangeEndKey : end;
