@@ -887,10 +887,9 @@ function isReservationActiveOnDate(reservation, day) {
   const checkOut = toDateKey(reservation?.check_out);
   if (!targetDay || !checkIn || !checkOut) return false;
   if (reservation.status === "cancelled") return false;
-  // Arriendo por noche: ocupa desde check_in (noche) hasta el día anterior a check_out.
-  // Ej: check_in=2026-04-06, check_out=2026-04-07 => 1 noche, ocupa solo el 06.
+  // Muestra la reserva desde check_in hasta check_out inclusive (igual que el documento del cliente).
   if (checkOut <= checkIn) return targetDay === checkIn;
-  return checkIn <= targetDay && targetDay < checkOut;
+  return checkIn <= targetDay && targetDay <= checkOut;
 }
 
 function renderAvailability(reservations) {
@@ -1006,8 +1005,8 @@ function renderOccupancyTimeline(reservations) {
       const activeOnDay = reservations.filter(r => 
         r.cabin_id === cabin.id && 
         r.status !== "cancelled" &&
-        toDateKey(r.check_in) <= dateKey && 
-        dateKey < toDateKey(r.check_out)
+        toDateKey(r.check_in) <= dateKey &&
+        dateKey <= toDateKey(r.check_out)
       );
 
       const isOccupied = activeOnDay.length > 0;
@@ -1253,8 +1252,8 @@ function clampReservationToRange(reservation, rangeStartKey, rangeEndKey) {
   const start = toDateKey(reservation.check_in);
   const endExclusive = toDateKey(reservation.check_out);
   if (!start || !endExclusive) return null;
-  // El bloque cubre check_in hasta check_out exclusive (igual que isReservationOccupyingDay).
-  const end = endExclusive <= start ? start : addDaysToDateKey(endExclusive, -1);
+  // El bloque cubre check_in hasta check_out inclusive (igual que el documento del cliente).
+  const end = endExclusive <= start ? start : endExclusive;
   // Intersección (rangos inclusivos)
   const clampedStart = start < rangeStartKey ? rangeStartKey : start;
   const clampedEnd = end > rangeEndKey ? rangeEndKey : end;
