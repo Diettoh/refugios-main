@@ -1061,7 +1061,7 @@ function getOccupancyForDate(reservations, dateKey, totalCabins, allowedCabinIds
     const checkOut = toDateKey(r.check_out);
     if (!checkIn || !checkOut) return false;
     if (checkOut <= checkIn) return checkIn === dateKey;
-    return checkIn <= dateKey && dateKey < checkOut;
+    return checkIn <= dateKey && dateKey <= checkOut;
   });
   const scoped = allowedCabinIds
     ? active.filter((r) => Number.isInteger(r.cabin_id) && allowedCabinIds.has(r.cabin_id))
@@ -1079,7 +1079,7 @@ function getActiveReservationsForDate(reservations, dateKey) {
     const checkOut = toDateKey(r.check_out);
     if (!checkIn || !checkOut) return false;
     if (checkOut <= checkIn) return checkIn === dateKey;
-    return checkIn <= dateKey && dateKey < checkOut;
+    return checkIn <= dateKey && dateKey <= checkOut;
   });
 }
 
