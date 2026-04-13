@@ -1118,11 +1118,12 @@ function getDayGuestLines(activeReservations, cabins, dateKey) {
 
   // Mapear reserva activa por cabaña (si por error llegan múltiples, dejamos la “mejor”).
   const byCabinId = new Map();
+  const turnoverByCabinId = new Map(); // cabinId → { out, in } en día de rotación
   for (const row of activeReservations || []) {
     const cabinId = Number(row?.cabin_id);
     if (!Number.isInteger(cabinId)) continue;
     if (!cabinById.has(cabinId)) continue;
-    const guestName = String(row?.guest_name || "").trim();
+    const guestName = String(row?.guest_name || “”).trim();
     if (!guestName) continue;
 
     const prev = byCabinId.get(cabinId);
@@ -1131,17 +1132,20 @@ function getDayGuestLines(activeReservations, cabins, dateKey) {
       continue;
     }
 
-    const prevConfirmed = prev.status === "confirmed";
-    const nextConfirmed = row.status === "confirmed";
+    const prevConfirmed = prev.status === “confirmed”;
+    const nextConfirmed = row.status === “confirmed”;
     if (prevConfirmed !== nextConfirmed) {
       if (nextConfirmed) byCabinId.set(cabinId, row);
       continue;
     }
 
-    // En día de rotación (sale uno y entra otro), mostrar al que llega.
+    // En día de rotación (sale uno y entra otro), mostrar ambos.
     const prevIsCheckIn = toDateKey(prev.check_in) === targetKey;
     const nextIsCheckIn = toDateKey(row.check_in) === targetKey;
     if (prevIsCheckIn !== nextIsCheckIn) {
+      const outRow = prevIsCheckIn ? row : prev;
+      const inRow  = prevIsCheckIn ? prev : row;
+      turnoverByCabinId.set(cabinId, { out: outRow, in: inRow });
       if (nextIsCheckIn) byCabinId.set(cabinId, row);
       continue;
     }
@@ -1160,9 +1164,28 @@ function getDayGuestLines(activeReservations, cabins, dateKey) {
     const cabinId = Number(cabin.id);
     const row = byCabinId.get(cabinId) || null;
     const palette = getCalendarCabinPalette(cabin, idx);
-    if (!row) return { label: "", status: "", palette, cabinIndex: idx, isEmpty: true };
+    if (!row) return { label: “”, status: “”, palette, cabinIndex: idx, isEmpty: true };
 
-    const rawName = String(row.guest_name || "").trim();
+    // Día de rotación: devolver ambos huéspedes en el mismo slot.
+    const turnover = turnoverByCabinId.get(cabinId) || null;
+    if (turnover) {
+      const outName = String(turnover.out.guest_name || “”).trim();
+      const inName  = String(turnover.in.guest_name  || “”).trim();
+      const outGuests = Number(turnover.out.guests_count) || 1;
+      const inGuests  = Number(turnover.in.guests_count)  || 1;
+      return {
+        isTurnover: true,
+        outLabel: `${outName.toUpperCase()} X${outGuests}`,
+        inLabel:  `${inName.toUpperCase()} X${inGuests}`,
+        guestKey: normalizeSearchKey(`${outName} ${inName}`),
+        status: turnover.in.status,
+        palette,
+        cabinIndex: idx,
+        isEmpty: false
+      };
+    }
+
+    const rawName = String(row.guest_name || “”).trim();
     const name = rawName.toUpperCase();
     const guests = Number(row.guests_count) || 1;
     const checkIn = toDateKey(row.check_in);
@@ -1214,6 +1237,22 @@ function renderCalendarDay(dateKey, dayLabel, dayClasses, reservations, cabins, 
           if (isPdf && line.status === "confirmed") classes.push("is-confirmed");
           if (isFiltering && !isMatch) classes.push("is-dim");
           if (isFiltering && isMatch) classes.push("is-match");
+
+          // Día de rotación: dos sub-filas en el mismo slot.
+          if (line.isTurnover) {
+            classes.push("is-turnover");
+            if (isPdf) {
+              const pdfColor = line.status === "confirmed" ? "#b91c1c" : line.palette.text;
+              return `<span class="${classes.join(" ")}" style="background:${line.palette.bg};color:${pdfColor};border-left:4px solid ${line.palette.border}">
+                <span class="calendar-turnover-row"><span class="calendar-flag is-out">OUT</span><span class="calendar-guest-row__text">${line.outLabel}</span></span>
+                <span class="calendar-turnover-row"><span class="calendar-flag is-in">IN</span><span class="calendar-guest-row__text">${line.inLabel}</span></span>
+              </span>`;
+            }
+            return `<span class="${classes.join(" ")}" style="border-left-color:${line.palette.border};background:${line.palette.soft}">
+              <span class="calendar-turnover-row"><span class="calendar-flag is-out">OUT</span><span class="calendar-guest-row__text">${line.outLabel}</span></span>
+              <span class="calendar-turnover-row"><span class="calendar-flag is-in">IN</span><span class="calendar-guest-row__text">${line.inLabel}</span></span>
+            </span>`;
+          }
 
           const flags = [];
           if (line.isCheckIn) flags.push(`<span class="calendar-flag is-in" title="Check-in">IN</span>`);
