@@ -1139,10 +1139,12 @@ function getDayGuestLines(activeReservations, cabins, dateKey) {
       continue;
     }
 
-    // Si ya hay uno, mostrar ambos como "rotación" (overlap o turnover)
-    const outRow = prev;
-    const inRow  = row;
-    turnoverByCabinId.set(cabinId, { out: outRow, in: inRow });
+    // Si ya hay registros, los acumulamos en una lista de "turnovers" para mostrar más de 2 si es necesario
+    if (!turnoverByCabinId.has(cabinId)) {
+      turnoverByCabinId.set(cabinId, [prev, row]);
+    } else {
+      turnoverByCabinId.get(cabinId).push(row);
+    }
     // Mantener en byCabinId el que tenga el check_in más reciente o mayor ID para consistencia
     if (toDateKey(row.check_in) > toDateKey(prev.check_in)) {
       byCabinId.set(cabinId, row);
@@ -1158,23 +1160,26 @@ function getDayGuestLines(activeReservations, cabins, dateKey) {
     const palette = getCalendarCabinPalette(cabin, idx);
     if (!row) return { label: "", status: "", palette, cabinIndex: idx, isEmpty: true };
 
-    // Día de rotación o solapamiento: devolver ambos huéspedes en el mismo slot.
-    const turnover = turnoverByCabinId.get(cabinId) || null;
-    if (turnover) {
-      const outName = String(turnover.out.guest_name || "").trim();
-      const inName  = String(turnover.in.guest_name  || "").trim();
-      const outGuests = Number(turnover.out.guests_count) || 1;
-      const inGuests  = Number(turnover.in.guests_count)  || 1;
+    // Día de rotación o solapamiento: devolver múltiples huéspedes si existen.
+    const turnovers = turnoverByCabinId.get(cabinId) || null;
+    if (turnovers && turnovers.length >= 2) {
+      // Ordenar por check_in para mostrar salida primero
+      const sorted = [...turnovers].sort((a, b) => dateWeight(a.check_in) - dateWeight(b.check_in) || (a.id || 0) - (b.id || 0));
+      const subRows = sorted.map(r => {
+        const name = String(r.guest_name || "").trim().toUpperCase();
+        const guests = Number(r.guests_count) || 1;
+        return {
+          label: `${name} X${guests}`,
+          isCheckIn: toDateKey(r.check_in) === targetKey,
+          isLastNight: toDateKey(r.check_out) === targetKey
+        };
+      });
+
       return {
         isTurnover: true,
-        outLabel: `${outName.toUpperCase()} X${outGuests}`,
-        inLabel:  `${inName.toUpperCase()} X${inGuests}`,
-        outIsCheckIn:  toDateKey(turnover.out.check_in) === targetKey,
-        outIsLastNight: toDateKey(turnover.out.check_out) === targetKey,
-        inIsCheckIn:   toDateKey(turnover.in.check_in) === targetKey,
-        inIsLastNight:  toDateKey(turnover.in.check_out) === targetKey,
-        guestKey: normalizeSearchKey(`${outName} ${inName}`),
-        status: turnover.in.status,
+        subRows,
+        guestKey: normalizeSearchKey(turnovers.map(r => r.guest_name).join(" ")),
+        status: row.status, // Usamos el status de la última reserva activa para el color
         palette,
         cabinIndex: idx,
         isEmpty: false
@@ -1234,26 +1239,24 @@ function renderCalendarDay(dateKey, dayLabel, dayClasses, reservations, cabins, 
           if (isFiltering && !isMatch) classes.push("is-dim");
           if (isFiltering && isMatch) classes.push("is-match");
 
-          // Día de rotación: dos sub-filas en el mismo slot.
+          // Día de rotación o múltiples huéspedes: sub-filas dinámicas.
           if (line.isTurnover) {
             classes.push("is-turnover");
-            const outFlags = [];
-            if (line.outIsCheckIn) outFlags.push(`<span class="calendar-flag is-in">IN</span>`);
-            if (line.outIsLastNight) outFlags.push(`<span class="calendar-flag is-out">OUT</span>`);
-            const inFlags = [];
-            if (line.inIsCheckIn) inFlags.push(`<span class="calendar-flag is-in">IN</span>`);
-            if (line.inIsLastNight) inFlags.push(`<span class="calendar-flag is-out">OUT</span>`);
+            const rowsHtml = (line.subRows || []).map(sub => {
+              const flags = [];
+              if (sub.isCheckIn) flags.push(`<span class="calendar-flag is-in">IN</span>`);
+              if (sub.isLastNight) flags.push(`<span class="calendar-flag is-out">OUT</span>`);
+              return `<span class="calendar-turnover-row">${flags.join("")}<span class="calendar-guest-row__text">${sub.label}</span></span>`;
+            }).join("");
 
             if (isPdf) {
               const pdfColor = line.status === "confirmed" ? "#b91c1c" : line.palette.text;
               return `<span class="${classes.join(" ")}" style="background:${line.palette.bg};color:${pdfColor};border-left:4px solid ${line.palette.border}">
-                <span class="calendar-turnover-row">${outFlags.join("")}<span class="calendar-guest-row__text">${line.outLabel}</span></span>
-                <span class="calendar-turnover-row">${inFlags.join("")}<span class="calendar-guest-row__text">${line.inLabel}</span></span>
+                ${rowsHtml}
               </span>`;
             }
             return `<span class="${classes.join(" ")}" style="border-left-color:${line.palette.border};background:${line.palette.soft}">
-              <span class="calendar-turnover-row">${outFlags.join("")}<span class="calendar-guest-row__text">${line.outLabel}</span></span>
-              <span class="calendar-turnover-row">${inFlags.join("")}<span class="calendar-guest-row__text">${line.inLabel}</span></span>
+              ${rowsHtml}
             </span>`;
           }
 
