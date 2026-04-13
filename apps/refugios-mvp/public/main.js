@@ -1138,6 +1138,14 @@ function getDayGuestLines(activeReservations, cabins, dateKey) {
       continue;
     }
 
+    // En día de rotación (sale uno y entra otro), mostrar al que llega.
+    const prevIsCheckIn = toDateKey(prev.check_in) === targetKey;
+    const nextIsCheckIn = toDateKey(row.check_in) === targetKey;
+    if (prevIsCheckIn !== nextIsCheckIn) {
+      if (nextIsCheckIn) byCabinId.set(cabinId, row);
+      continue;
+    }
+
     // Estable: preferir la que parte antes (check_in) y luego el id.
     const prevW = dateWeight(prev.check_in);
     const nextW = dateWeight(row.check_in);
