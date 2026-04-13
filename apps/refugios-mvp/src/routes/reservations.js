@@ -433,8 +433,8 @@ router.post("/", async (req, res, next) => {
     if (!isDateTimeValue(follow_up_at)) {
       return res.status(400).json({ error: "follow_up_at invalido. Usa formato YYYY-MM-DDTHH:MM" });
     }
-    if (check_in >= check_out) {
-      return res.status(400).json({ error: "check_out debe ser posterior a check_in" });
+    if (check_in > check_out) {
+      return res.status(400).json({ error: "check_out debe ser igual o posterior a check_in" });
     }
     const normalizedLeadStage = normalizeLeadStage(lead_stage, status);
     if (!LEAD_STAGES.has(normalizedLeadStage)) {
@@ -924,8 +924,8 @@ router.patch("/:id", async (req, res, next) => {
       if (fromDb.rowCount === 0) return res.status(404).json({ error: "reserva no encontrada" });
       const nextCheckIn = body.check_in == null || body.check_in === "" ? fromDb.rows[0].check_in : body.check_in;
       const nextCheckOut = body.check_out == null || body.check_out === "" ? fromDb.rows[0].check_out : body.check_out;
-      if (String(nextCheckIn) >= String(nextCheckOut)) {
-        return res.status(400).json({ error: "check_out debe ser posterior a check_in" });
+      if (String(nextCheckIn) > String(nextCheckOut)) {
+        return res.status(400).json({ error: "check_out debe ser igual o posterior a check_in" });
       }
     }
 

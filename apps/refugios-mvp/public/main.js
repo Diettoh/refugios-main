@@ -1139,23 +1139,15 @@ function getDayGuestLines(activeReservations, cabins, dateKey) {
       continue;
     }
 
-    // En día de rotación (sale uno y entra otro), mostrar ambos.
-    const prevIsCheckIn = toDateKey(prev.check_in) === targetKey;
-    const nextIsCheckIn = toDateKey(row.check_in) === targetKey;
-    if (prevIsCheckIn !== nextIsCheckIn) {
-      const outRow = prevIsCheckIn ? row : prev;
-      const inRow  = prevIsCheckIn ? prev : row;
-      turnoverByCabinId.set(cabinId, { out: outRow, in: inRow });
-      if (nextIsCheckIn) byCabinId.set(cabinId, row);
-      continue;
-    }
-
-    // Estable: preferir la que parte antes (check_in) y luego el id.
-    const prevW = dateWeight(prev.check_in);
-    const nextW = dateWeight(row.check_in);
-    if (nextW < prevW || (nextW === prevW && Number(row.id || 0) < Number(prev.id || 0))) {
+    // Si ya hay uno, mostrar ambos como "rotación" (overlap o turnover)
+    const outRow = prev;
+    const inRow  = row;
+    turnoverByCabinId.set(cabinId, { out: outRow, in: inRow });
+    // Mantener en byCabinId el que tenga el check_in más reciente o mayor ID para consistencia
+    if (toDateKey(row.check_in) > toDateKey(prev.check_in)) {
       byCabinId.set(cabinId, row);
     }
+    continue;
   }
 
   // IMPORTANTE: mantener la misma cantidad y orden de filas por día para que "se alineen"
@@ -1166,7 +1158,7 @@ function getDayGuestLines(activeReservations, cabins, dateKey) {
     const palette = getCalendarCabinPalette(cabin, idx);
     if (!row) return { label: "", status: "", palette, cabinIndex: idx, isEmpty: true };
 
-    // Día de rotación: devolver ambos huéspedes en el mismo slot.
+    // Día de rotación o solapamiento: devolver ambos huéspedes en el mismo slot.
     const turnover = turnoverByCabinId.get(cabinId) || null;
     if (turnover) {
       const outName = String(turnover.out.guest_name || "").trim();
@@ -1177,6 +1169,10 @@ function getDayGuestLines(activeReservations, cabins, dateKey) {
         isTurnover: true,
         outLabel: `${outName.toUpperCase()} X${outGuests}`,
         inLabel:  `${inName.toUpperCase()} X${inGuests}`,
+        outIsCheckIn:  toDateKey(turnover.out.check_in) === targetKey,
+        outIsLastNight: toDateKey(turnover.out.check_out) === targetKey,
+        inIsCheckIn:   toDateKey(turnover.in.check_in) === targetKey,
+        inIsLastNight:  toDateKey(turnover.in.check_out) === targetKey,
         guestKey: normalizeSearchKey(`${outName} ${inName}`),
         status: turnover.in.status,
         palette,
@@ -1241,16 +1237,23 @@ function renderCalendarDay(dateKey, dayLabel, dayClasses, reservations, cabins, 
           // Día de rotación: dos sub-filas en el mismo slot.
           if (line.isTurnover) {
             classes.push("is-turnover");
+            const outFlags = [];
+            if (line.outIsCheckIn) outFlags.push(`<span class="calendar-flag is-in">IN</span>`);
+            if (line.outIsLastNight) outFlags.push(`<span class="calendar-flag is-out">OUT</span>`);
+            const inFlags = [];
+            if (line.inIsCheckIn) inFlags.push(`<span class="calendar-flag is-in">IN</span>`);
+            if (line.inIsLastNight) inFlags.push(`<span class="calendar-flag is-out">OUT</span>`);
+
             if (isPdf) {
               const pdfColor = line.status === "confirmed" ? "#b91c1c" : line.palette.text;
               return `<span class="${classes.join(" ")}" style="background:${line.palette.bg};color:${pdfColor};border-left:4px solid ${line.palette.border}">
-                <span class="calendar-turnover-row"><span class="calendar-flag is-out">OUT</span><span class="calendar-guest-row__text">${line.outLabel}</span></span>
-                <span class="calendar-turnover-row"><span class="calendar-flag is-in">IN</span><span class="calendar-guest-row__text">${line.inLabel}</span></span>
+                <span class="calendar-turnover-row">${outFlags.join("")}<span class="calendar-guest-row__text">${line.outLabel}</span></span>
+                <span class="calendar-turnover-row">${inFlags.join("")}<span class="calendar-guest-row__text">${line.inLabel}</span></span>
               </span>`;
             }
             return `<span class="${classes.join(" ")}" style="border-left-color:${line.palette.border};background:${line.palette.soft}">
-              <span class="calendar-turnover-row"><span class="calendar-flag is-out">OUT</span><span class="calendar-guest-row__text">${line.outLabel}</span></span>
-              <span class="calendar-turnover-row"><span class="calendar-flag is-in">IN</span><span class="calendar-guest-row__text">${line.inLabel}</span></span>
+              <span class="calendar-turnover-row">${outFlags.join("")}<span class="calendar-guest-row__text">${line.outLabel}</span></span>
+              <span class="calendar-turnover-row">${inFlags.join("")}<span class="calendar-guest-row__text">${line.inLabel}</span></span>
             </span>`;
           }
 
@@ -1323,7 +1326,7 @@ function packTimelineRows(items) {
   for (const item of sorted) {
     let rowIndex = -1;
     for (let i = 0; i < rows.length; i++) {
-      if (rows[i] < item.startIdx) {
+      if (rows[i] <= item.startIdx) {
         rowIndex = i;
         break;
       }
@@ -1383,9 +1386,10 @@ function renderCalendarTimeline(reservations) {
           const hit = clampReservationToRange(r, startKey, endKey);
           if (!hit) return null;
           const startIdx = dateKeyDiffDays(startKey, hit.start);
-          const endIdx = dateKeyDiffDays(startKey, hit.end);
-          if (endIdx < 0 || startIdx > daysInMonth - 1) return null;
-          return { ...r, startIdx, endIdx };
+          const nights = dateKeyDiffDays(r.check_in, r.check_out);
+          const endIdxForPacking = startIdx + Math.max(1, nights);
+          if (endIdxForPacking < 0 || startIdx > daysInMonth - 1) return null;
+          return { ...r, startIdx, endIdx: endIdxForPacking };
         })
         .filter(Boolean);
 
@@ -1399,7 +1403,8 @@ function renderCalendarTimeline(reservations) {
       const bars = placed
         .map((r) => {
           const left = r.startIdx * dayW;
-          const width = Math.max(dayW, (r.endIdx - r.startIdx + 1) * dayW);
+          const nights = dateKeyDiffDays(r.check_in, r.check_out);
+          const width = Math.max(dayW, nights * dayW);
           const top = r.rowIndex * rowH + 3;
           const guest = String(r.guest_name || "").trim() || "Sin nombre";
           const pax = Number(r.guests_count) || 1;
