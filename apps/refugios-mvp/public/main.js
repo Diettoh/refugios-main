@@ -1230,7 +1230,7 @@ function renderCalendarDay(dateKey, dayLabel, dayClasses, reservations, cabins, 
   const guestHtml = guests.length
     ? guests
         .map((line) => {
-          if (!line || !line.label) return `<span class="calendar-guest-row is-empty"></span>`;
+          if (!line || (!line.label && !line.isTurnover)) return `<span class="calendar-guest-row is-empty"></span>`;
           const isFiltering = Boolean(query);
           const isMatch = !isFiltering || (line.guestKey && line.guestKey.includes(query));
           const classes = ["calendar-guest-row"];
