@@ -132,6 +132,7 @@ const state = {
   reservationsFilterMinNights: "",
   reservationsFilterMaxNights: "",
   reservationsFilterDocType: "",
+  reservationsFilterShowCancelled: false,
   documentsFilterType: "",
   cabins: [],
   calendarReservations: []
@@ -848,6 +849,7 @@ function applyGuestsFilters(rows) {
 
 function applyReservationsFilters(rows) {
   return rows.filter((row) => {
+    if (!state.reservationsFilterShowCancelled && row.status === "cancelled") return false;
     if (state.reservationsFilterSource && row.source !== state.reservationsFilterSource) return false;
     if (state.reservationsFilterDebt && row.debt_status !== state.reservationsFilterDebt) return false;
     if (state.reservationsFilterName) {
@@ -3166,6 +3168,14 @@ function bindReservationsFilters() {
   if (docType) {
     docType.addEventListener("change", async () => {
       state.reservationsFilterDocType = docType.value || "";
+      await loadAll();
+    });
+  }
+
+  const showCancelled = document.getElementById("reservations-filter-show-cancelled");
+  if (showCancelled) {
+    showCancelled.addEventListener("change", async () => {
+      state.reservationsFilterShowCancelled = showCancelled.checked;
       await loadAll();
     });
   }
