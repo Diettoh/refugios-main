@@ -1116,14 +1116,14 @@ function getDayGuestLines(activeReservations, cabins, dateKey) {
   const cabinById = new Map(cabinList.map((c) => [Number(c.id), c]));
   const targetKey = toDateKey(dateKey);
 
-  // Mapear reserva activa por cabaña (si por error llegan múltiples, dejamos la “mejor”).
+  // Mapear reserva activa por cabaña (si por error llegan múltiples, dejamos la "mejor").
   const byCabinId = new Map();
   const turnoverByCabinId = new Map(); // cabinId → { out, in } en día de rotación
   for (const row of activeReservations || []) {
     const cabinId = Number(row?.cabin_id);
     if (!Number.isInteger(cabinId)) continue;
     if (!cabinById.has(cabinId)) continue;
-    const guestName = String(row?.guest_name || “”).trim();
+    const guestName = String(row?.guest_name || "").trim();
     if (!guestName) continue;
 
     const prev = byCabinId.get(cabinId);
@@ -1132,8 +1132,8 @@ function getDayGuestLines(activeReservations, cabins, dateKey) {
       continue;
     }
 
-    const prevConfirmed = prev.status === “confirmed”;
-    const nextConfirmed = row.status === “confirmed”;
+    const prevConfirmed = prev.status === "confirmed";
+    const nextConfirmed = row.status === "confirmed";
     if (prevConfirmed !== nextConfirmed) {
       if (nextConfirmed) byCabinId.set(cabinId, row);
       continue;
@@ -1158,19 +1158,19 @@ function getDayGuestLines(activeReservations, cabins, dateKey) {
     }
   }
 
-  // IMPORTANTE: mantener la misma cantidad y orden de filas por día para que “se alineen”
+  // IMPORTANTE: mantener la misma cantidad y orden de filas por día para que "se alineen"
   // los nombres entre días (una fila por cabaña, con placeholders vacíos).
   return cabinList.map((cabin, idx) => {
     const cabinId = Number(cabin.id);
     const row = byCabinId.get(cabinId) || null;
     const palette = getCalendarCabinPalette(cabin, idx);
-    if (!row) return { label: “”, status: “”, palette, cabinIndex: idx, isEmpty: true };
+    if (!row) return { label: "", status: "", palette, cabinIndex: idx, isEmpty: true };
 
     // Día de rotación: devolver ambos huéspedes en el mismo slot.
     const turnover = turnoverByCabinId.get(cabinId) || null;
     if (turnover) {
-      const outName = String(turnover.out.guest_name || “”).trim();
-      const inName  = String(turnover.in.guest_name  || “”).trim();
+      const outName = String(turnover.out.guest_name || "").trim();
+      const inName  = String(turnover.in.guest_name  || "").trim();
       const outGuests = Number(turnover.out.guests_count) || 1;
       const inGuests  = Number(turnover.in.guests_count)  || 1;
       return {
@@ -1185,7 +1185,7 @@ function getDayGuestLines(activeReservations, cabins, dateKey) {
       };
     }
 
-    const rawName = String(row.guest_name || “”).trim();
+    const rawName = String(row.guest_name || "").trim();
     const name = rawName.toUpperCase();
     const guests = Number(row.guests_count) || 1;
     const checkIn = toDateKey(row.check_in);
