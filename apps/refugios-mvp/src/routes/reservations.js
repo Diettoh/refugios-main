@@ -992,18 +992,27 @@ router.delete("/:id", async (req, res, next) => {
     return res.status(400).json({ error: "id invalido" });
   }
 
+  const dbClient = await getClient();
   try {
-    // Soft delete: no borrar datos operativos. Cancelar la reserva para poder recuperarla si es necesario.
-    const result = await query(
-      "UPDATE reservations SET status = 'cancelled' WHERE id = $1 RETURNING id, status",
-      [id]
-    );
-    if (result.rowCount === 0) {
+    await dbClient.query("BEGIN");
+
+    const existing = await dbClient.query("SELECT id FROM reservations WHERE id = $1", [id]);
+    if (existing.rowCount === 0) {
+      await dbClient.query("ROLLBACK");
       return res.status(404).json({ error: "Reserva no encontrada" });
     }
-    return res.json({ ok: true, id, status: result.rows[0].status });
+
+    // Eliminar ventas asociadas antes de borrar la reserva
+    await dbClient.query("DELETE FROM sales WHERE reservation_id = $1", [id]);
+    await dbClient.query("DELETE FROM reservations WHERE id = $1", [id]);
+
+    await dbClient.query("COMMIT");
+    return res.json({ ok: true, id });
   } catch (error) {
+    await dbClient.query("ROLLBACK");
     return next(error);
+  } finally {
+    dbClient.release();
   }
 });
 

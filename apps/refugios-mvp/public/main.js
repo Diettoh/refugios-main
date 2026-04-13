@@ -132,7 +132,6 @@ const state = {
   reservationsFilterMinNights: "",
   reservationsFilterMaxNights: "",
   reservationsFilterDocType: "",
-  reservationsFilterShowCancelled: false,
   documentsFilterType: "",
   cabins: [],
   calendarReservations: []
@@ -849,7 +848,6 @@ function applyGuestsFilters(rows) {
 
 function applyReservationsFilters(rows) {
   return rows.filter((row) => {
-    if (!state.reservationsFilterShowCancelled && row.status === "cancelled") return false;
     if (state.reservationsFilterSource && row.source !== state.reservationsFilterSource) return false;
     if (state.reservationsFilterDebt && row.debt_status !== state.reservationsFilterDebt) return false;
     if (state.reservationsFilterName) {
@@ -1976,7 +1974,7 @@ async function loadAll() {
         <button type="button" class="btn btn--sm btn--ghost btn-change-guest" data-reservation-id="${row.id}" title="Cambiar huésped vinculado">Huésped</button>
         <button type="button" class="btn btn--sm btn--ghost btn-change-cabin" data-reservation-id="${row.id}" title="Cambiar cabaña asignada">Cabaña</button>
         <button type="button" class="btn btn--sm btn--ghost btn-edit-reservation" data-reservation-id="${row.id}">Editar</button>
-        ${deleteButton("reservations", row.id, "Cancelar")}
+        ${deleteButton("reservations", row.id)}
       </div>
     </li>`);
 
@@ -2949,14 +2947,12 @@ function bindDeleteButtons() {
     if (!deleteType || !id) return;
 
     const actionLabel =
-      deleteType === "reservations"
-        ? "Cancelar"
-        : deleteType === "documents"
-          ? "Anular"
-          : "Eliminar";
+      deleteType === "documents"
+        ? "Anular"
+        : "Eliminar";
     const warning =
       deleteType === "reservations"
-        ? "La reserva quedará en estado cancelled (recuperable)."
+        ? "Se eliminará la reserva y todas sus ventas asociadas. Esta accion no se puede deshacer."
         : deleteType === "documents"
           ? "El documento quedará en estado voided (trazable)."
           : "Esta accion no se puede deshacer.";
@@ -2969,11 +2965,9 @@ function bindDeleteButtons() {
       await api(`/api/${deleteType}/${id}`, { method: "DELETE" });
       await loadAll();
       const doneLabel =
-        deleteType === "reservations"
-          ? "cancelada"
-          : deleteType === "documents"
-            ? "anulado"
-            : "eliminado";
+        deleteType === "documents"
+          ? "anulado"
+          : "eliminado";
       setStatus(`Registro #${id} ${doneLabel}`, "ok");
     } catch (error) {
       setStatus(error.message, "error");
@@ -3172,13 +3166,6 @@ function bindReservationsFilters() {
     });
   }
 
-  const showCancelled = document.getElementById("reservations-filter-show-cancelled");
-  if (showCancelled) {
-    showCancelled.addEventListener("change", async () => {
-      state.reservationsFilterShowCancelled = showCancelled.checked;
-      await loadAll();
-    });
-  }
 }
 
 function bindDocumentsFilters() {
