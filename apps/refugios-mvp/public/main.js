@@ -105,7 +105,8 @@ const state = {
   periodTo: "",
   availabilityDate: new Date().toISOString().slice(0, 10),
   calendarMonth: new Date().toISOString().slice(0, 7),
-  calendarView: window.localStorage.getItem("calendar_view") || "panel",
+  calendarView: window.localStorage.getItem("calendar_view") || "week",
+  calendarWeekStart: null,
   calendarGuestQuery: window.localStorage.getItem("calendar_guest_query") || "",
   salesPeriodBy: "check_in",
   totalCabins: Number(localStorage.getItem("total_cabins") || 6),
@@ -1089,6 +1090,192 @@ function getCabinColor(cabin) {
   return cabin.color_hex || defaults.color;
 }
 
+// ── Week calendar helpers ─────────────────────────────────────
+
+const RESERVATION_COLORS = [
+  "#3b82f6", "#10b981", "#f59e0b", "#ef4444",
+  "#8b5cf6", "#06b6d4", "#f97316", "#ec4899",
+  "#14b8a6", "#6366f1"
+];
+
+function getReservationColor(id) {
+  return RESERVATION_COLORS[Math.abs(Number(id) || 0) % RESERVATION_COLORS.length];
+}
+
+function getWeekStart(dateStr) {
+  const d = new Date(String(dateStr || new Date().toISOString()).slice(0, 10) + "T12:00:00");
+  const dow = d.getDay(); // 0=Sun
+  d.setDate(d.getDate() + (dow === 0 ? -6 : 1 - dow));
+  return d.toISOString().slice(0, 10);
+}
+
+function addDays(dateStr, n) {
+  const d = new Date(String(dateStr).slice(0, 10) + "T12:00:00");
+  d.setDate(d.getDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+function updateWeekCalendarTitle() {
+  const titleEl = document.getElementById("calendar-title");
+  if (!titleEl) return;
+  const ws = state.calendarWeekStart || getWeekStart(new Date().toISOString().slice(0, 10));
+  const we = addDays(ws, 6);
+  const d1 = Number(ws.slice(8));
+  const d2 = Number(we.slice(8));
+  const m1 = Number(ws.slice(5, 7)) - 1;
+  const m2 = Number(we.slice(5, 7)) - 1;
+  const yr = Number(we.slice(0, 4));
+  const MS = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
+  titleEl.textContent = m1 === m2
+    ? `${d1}–${d2} ${MS[m1]} ${yr}`
+    : `${d1} ${MS[m1]} – ${d2} ${MS[m2]} ${yr}`;
+}
+
+function renderWeekCell(cabin, dateKey, reservations, today) {
+  const isToday = dateKey === today;
+  const blocks = [];
+
+  for (const r of reservations) {
+    if (Number(r.cabin_id) !== Number(cabin.id)) continue;
+    const ci = toDateKey(r.check_in);
+    const co = toDateKey(r.check_out);
+    if (!ci || !co) continue;
+
+    if (ci === dateKey) blocks.push({ type: "in", sort: 0, r });
+    if (co === dateKey && ci !== co) blocks.push({ type: "out", sort: 2, r });
+    if (ci < dateKey && co > dateKey) blocks.push({ type: "stay", sort: 1, r });
+  }
+
+  // Order: IN → STAY → OUT
+  blocks.sort((a, b) => a.sort - b.sort || a.r.id - b.r.id);
+
+  let blocksHtml = "";
+  for (const blk of blocks) {
+    const color = getReservationColor(blk.r.id);
+    const guest = blk.r.guest_name || "Huésped";
+    const firstName = guest.split(" ")[0];
+    const rid = blk.r.id;
+    const tip = `${guest} | ${toDateKey(blk.r.check_in)} → ${toDateKey(blk.r.check_out)}`;
+    if (blk.type === "in") {
+      blocksHtml += `<div class="week-block week-block--in" style="--block-color:${color}" data-reservation-id="${rid}" title="${tip}">
+        <span class="week-block__flag">IN</span><span class="week-block__guest">${firstName}</span></div>`;
+    } else if (blk.type === "stay") {
+      blocksHtml += `<div class="week-block week-block--stay" style="--block-color:${color}" data-reservation-id="${rid}" title="${tip}">
+        <span class="week-block__guest">${firstName}</span></div>`;
+    } else {
+      blocksHtml += `<div class="week-block week-block--out" style="--block-color:${color}" data-reservation-id="${rid}" title="${tip}">
+        <span class="week-block__flag">OUT</span><span class="week-block__guest">${firstName}</span></div>`;
+    }
+  }
+
+  return `<div class="week-cal__cell${isToday ? " is-today" : ""}" data-cabin-id="${cabin.id}" data-date="${dateKey}">
+    <button class="week-cal__add-btn" tabindex="-1" title="Nueva reserva — ${cabin.name}">+</button>
+    ${blocksHtml}
+  </div>`;
+}
+
+function renderCalendarWeek(reservations) {
+  const container = document.getElementById("calendar-week");
+  if (!container) return;
+
+  if (!state.calendarWeekStart) {
+    state.calendarWeekStart = getWeekStart(state.availabilityDate || new Date().toISOString().slice(0, 10));
+  }
+
+  const ws = state.calendarWeekStart;
+  const today = new Date().toISOString().slice(0, 10);
+  const DAYS = ["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"];
+  const MS = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
+
+  const days = Array.from({ length: 7 }, (_, i) => addDays(ws, i));
+  const weekEnd = days[6];
+
+  const cabins = getCalendarCabins(state.cabins);
+
+  const weekRes = (reservations || []).filter(r => {
+    if (r.status === "cancelled") return false;
+    const ci = toDateKey(r.check_in);
+    const co = toDateKey(r.check_out);
+    return ci && co && ci <= weekEnd && co >= ws;
+  });
+
+  let html = `<div class="week-cal">`;
+
+  // Header
+  html += `<div class="week-cal__header"><div class="week-cal__corner">Cabaña</div>`;
+  for (let i = 0; i < 7; i++) {
+    const dk = days[i];
+    const dayNum = Number(dk.slice(8));
+    const monthIdx = Number(dk.slice(5, 7)) - 1;
+    const showMonth = i === 0 || dayNum === 1;
+    const isT = dk === today;
+    html += `<div class="week-cal__day-head${isT ? " is-today" : ""}" data-date="${dk}">
+      <span class="week-cal__day-name">${DAYS[i]}</span>
+      <span class="week-cal__day-num">${dayNum}</span>
+      ${showMonth ? `<span class="week-cal__day-month">${MS[monthIdx]}</span>` : ""}
+    </div>`;
+  }
+  html += `</div>`;
+
+  // Body — one row per cabin
+  html += `<div class="week-cal__body">`;
+  for (const cabin of cabins) {
+    const cabinColor = getCabinColor(cabin);
+    html += `<div class="week-cal__row">
+      <div class="week-cal__cabin-label" title="${cabin.name}">
+        <span class="week-cal__cabin-dot" style="background:${cabinColor};"></span>
+        <span class="week-cal__cabin-name">${cabin.name}</span>
+      </div>`;
+    for (const dk of days) {
+      html += renderWeekCell(cabin, dk, weekRes, today);
+    }
+    html += `</div>`;
+  }
+  html += `</div></div>`;
+
+  container.innerHTML = html;
+
+  // Events: "+" buttons
+  container.querySelectorAll(".week-cal__add-btn").forEach(btn => {
+    btn.addEventListener("click", e => {
+      e.stopPropagation();
+      const cell = btn.closest(".week-cal__cell");
+      if (cell) openReservationWithContext(cell.dataset.cabinId, cell.dataset.date);
+    });
+  });
+
+  // Events: click block → edit reservation
+  container.querySelectorAll(".week-block[data-reservation-id]").forEach(blk => {
+    blk.addEventListener("click", e => {
+      e.stopPropagation();
+      const rid = Number(blk.dataset.reservationId);
+      if (rid > 0 && typeof openReservationEditor === "function") openReservationEditor(rid);
+    });
+  });
+}
+
+window.openReservationWithContext = function openReservationWithContext(cabinId, dateStr) {
+  resetReservationForm();
+  const modal = document.getElementById("reservation-modal");
+  const form = document.getElementById("reservation-form");
+  if (!modal || !form) return;
+
+  const cabinSelect = document.getElementById("reservation-cabin");
+  if (cabinSelect) cabinSelect.value = String(cabinId);
+
+  const checkInInput = form.querySelector('input[name="check_in"]');
+  if (checkInInput) checkInInput.value = String(dateStr || "");
+
+  setTimeout(() => {
+    if (cabinSelect) cabinSelect.dispatchEvent(new Event("change"));
+    if (checkInInput) checkInInput.dispatchEvent(new Event("change"));
+  }, 0);
+
+  openModal(modal);
+};
+
+// ─────────────────────────────────────────────────────────────
+
 function getCalendarCabinPalette(cabin, idx = 0) {
   const rawName = String(cabin?.name || "").trim();
   const rawCode = String(cabin?.short_code || "").trim().toUpperCase();
@@ -1496,13 +1683,24 @@ function renderCalendarTimeline(reservations) {
 function renderCalendar(reservations) {
   const container = document.getElementById("calendar-days");
   const timeline = document.getElementById("calendar-timeline");
+  const weekEl = document.getElementById("calendar-week");
   const titleEl = document.getElementById("calendar-title");
   const gridEl = document.getElementById("calendar-grid");
   if (!titleEl) return;
 
-  if (gridEl) gridEl.hidden = state.calendarView === "timeline";
-  if (timeline) timeline.hidden = state.calendarView !== "timeline";
-  if (state.calendarView === "timeline") {
+  const isWeek = state.calendarView === "week";
+  const isTimeline = state.calendarView === "timeline";
+
+  if (gridEl) gridEl.hidden = isTimeline || isWeek;
+  if (timeline) timeline.hidden = !isTimeline;
+  if (weekEl) weekEl.hidden = !isWeek;
+
+  if (isWeek) {
+    updateWeekCalendarTitle();
+    renderCalendarWeek(reservations);
+    return;
+  }
+  if (isTimeline) {
     renderCalendarTimeline(reservations);
     return;
   }
@@ -1569,38 +1767,55 @@ function setupCalendarControls() {
 
   if (prevBtn) {
     prevBtn.addEventListener("click", () => {
-      const [yy, mm] = state.calendarMonth.split("-").map(Number);
-      const d = new Date(yy, mm - 2, 1);
-      state.calendarMonth = d.toISOString().slice(0, 7);
-      loadAll();
+      if (state.calendarView === "week") {
+        state.calendarWeekStart = addDays(
+          state.calendarWeekStart || getWeekStart(new Date().toISOString().slice(0, 10)), -7
+        );
+        updateWeekCalendarTitle();
+        renderCalendarWeek(state.calendarReservations || []);
+      } else {
+        const [yy, mm] = state.calendarMonth.split("-").map(Number);
+        const d = new Date(yy, mm - 2, 1);
+        state.calendarMonth = d.toISOString().slice(0, 7);
+        loadAll();
+      }
     });
   }
   if (nextBtn) {
     nextBtn.addEventListener("click", () => {
-      const [yy, mm] = state.calendarMonth.split("-").map(Number);
-      const d = new Date(yy, mm, 1);
-      state.calendarMonth = d.toISOString().slice(0, 7);
-      loadAll();
+      if (state.calendarView === "week") {
+        state.calendarWeekStart = addDays(
+          state.calendarWeekStart || getWeekStart(new Date().toISOString().slice(0, 10)), 7
+        );
+        updateWeekCalendarTitle();
+        renderCalendarWeek(state.calendarReservations || []);
+      } else {
+        const [yy, mm] = state.calendarMonth.split("-").map(Number);
+        const d = new Date(yy, mm, 1);
+        state.calendarMonth = d.toISOString().slice(0, 7);
+        loadAll();
+      }
     });
   }
 
   if (viewBtn) {
+    const VIEW_ORDER = ["week", "panel", "timeline", "pdf"];
+    const VIEW_NEXT_LABEL = {
+      week: "Vista mensual",
+      panel: "Vista timeline",
+      timeline: "Vista PDF",
+      pdf: "Vista semana"
+    };
     const applyLabel = () => {
-      const nextLabelByView = {
-        panel: "Vista timeline",
-        timeline: "Vista PDF",
-        pdf: "Vista panel"
-      };
-      viewBtn.textContent = nextLabelByView[state.calendarView] || "Vista timeline";
+      viewBtn.textContent = VIEW_NEXT_LABEL[state.calendarView] || "Vista semana";
     };
     applyLabel();
     viewBtn.addEventListener("click", () => {
-      const order = ["panel", "timeline", "pdf"];
-      const idx = Math.max(0, order.indexOf(state.calendarView));
-      state.calendarView = order[(idx + 1) % order.length];
+      const idx = Math.max(0, VIEW_ORDER.indexOf(state.calendarView));
+      state.calendarView = VIEW_ORDER[(idx + 1) % VIEW_ORDER.length];
       window.localStorage.setItem("calendar_view", state.calendarView);
       applyLabel();
-      loadAll();
+      renderCalendar(state.calendarReservations || []);
     });
   }
 

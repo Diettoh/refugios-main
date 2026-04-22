@@ -2806,3 +2806,251 @@ body.modal-open {
     size: A4 landscape;
   }
 }
+
+/* ============================================================
+   WEEK CALENDAR VIEW
+   ============================================================ */
+
+#calendar-week {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.week-cal {
+  min-width: 640px;
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+/* ── Header row (day names + numbers) ── */
+.week-cal__header {
+  display: grid;
+  grid-template-columns: 130px repeat(7, 1fr);
+  background: var(--bg-elevated);
+  border-bottom: 2px solid var(--border-strong);
+  position: sticky;
+  top: 0;
+  z-index: 4;
+}
+
+.week-cal__corner {
+  padding: 0.5rem;
+  border-right: 1px solid var(--border-strong);
+  font-size: 0.65rem;
+  color: var(--ink-muted);
+  display: flex;
+  align-items: flex-end;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.week-cal__day-head {
+  padding: 0.35rem 0.25rem 0.3rem;
+  text-align: center;
+  border-right: 1px solid var(--border);
+  cursor: default;
+  user-select: none;
+}
+
+.week-cal__day-head:last-child { border-right: none; }
+
+.week-cal__day-head.is-today {
+  background: var(--accent-soft);
+}
+
+.week-cal__day-head.is-today .week-cal__day-num {
+  color: var(--accent);
+}
+
+.week-cal__day-name {
+  display: block;
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--ink-muted);
+  font-weight: 700;
+}
+
+.week-cal__day-num {
+  display: block;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--ink);
+  line-height: 1.15;
+}
+
+.week-cal__day-month {
+  display: block;
+  font-size: 0.58rem;
+  color: var(--ink-muted);
+  font-weight: 500;
+}
+
+/* ── Body (cabin rows) ── */
+.week-cal__body {
+  display: flex;
+  flex-direction: column;
+}
+
+.week-cal__row {
+  display: grid;
+  grid-template-columns: 130px repeat(7, 1fr);
+  border-bottom: 1px solid var(--border);
+  min-height: 60px;
+}
+
+.week-cal__row:last-child { border-bottom: none; }
+
+.week-cal__row:nth-child(even) .week-cal__cell {
+  background: rgba(255,255,255,0.012);
+}
+
+/* ── Cabin label column ── */
+.week-cal__cabin-label {
+  padding: 0.4rem 0.5rem;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+  border-right: 2px solid var(--border-strong);
+  background: var(--bg-elevated);
+  overflow: hidden;
+}
+
+.week-cal__cabin-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 5px;
+}
+
+.week-cal__cabin-name {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--ink-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.35;
+}
+
+/* ── Day cells ── */
+.week-cal__cell {
+  position: relative;
+  padding: 3px;
+  border-right: 1px solid var(--border);
+  min-height: 60px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.week-cal__cell:last-child { border-right: none; }
+
+.week-cal__cell.is-today {
+  background: var(--accent-soft) !important;
+}
+
+.week-cal__cell.is-today::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--accent);
+}
+
+/* "+" button — visible only on cell hover */
+.week-cal__add-btn {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  border: none;
+  background: var(--accent);
+  color: var(--ink-on-accent);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  display: none;
+  z-index: 3;
+  padding: 0;
+  align-items: center;
+  justify-content: center;
+  transition: filter var(--transition);
+}
+
+.week-cal__cell:hover .week-cal__add-btn {
+  display: flex;
+}
+
+.week-cal__add-btn:hover {
+  filter: brightness(1.18);
+}
+
+/* ── Reservation blocks ── */
+.week-block {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  height: 22px;
+  padding: 0 5px;
+  border-radius: 3px;
+  font-size: 0.72rem;
+  font-weight: 500;
+  overflow: hidden;
+  white-space: nowrap;
+  cursor: pointer;
+  min-width: 0;
+  flex-shrink: 0;
+  background: var(--block-color, #4f46e5);
+  color: #fff;
+  text-shadow: 0 1px 1px rgba(0,0,0,0.2);
+  transition: filter 0.12s ease, transform 0.08s ease;
+  user-select: none;
+}
+
+.week-block:hover {
+  filter: brightness(1.18);
+  transform: translateY(-1px);
+}
+
+.week-block--in {
+  border-radius: 4px 4px 4px 4px;
+  opacity: 1;
+}
+
+.week-block--stay {
+  border-radius: 2px;
+  opacity: 0.75;
+}
+
+.week-block--out {
+  border-radius: 4px 4px 4px 4px;
+  opacity: 0.88;
+}
+
+.week-block__flag {
+  font-size: 0.57rem;
+  font-weight: 900;
+  background: rgba(0,0,0,0.25);
+  padding: 1px 4px;
+  border-radius: 2px;
+  flex-shrink: 0;
+  letter-spacing: 0.05em;
+}
+
+.week-block__guest {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
