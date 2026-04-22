@@ -1027,10 +1027,14 @@ router.delete("/:id", async (req, res, next) => {
   try {
     await dbClient.query("BEGIN");
 
-    const existing = await dbClient.query("SELECT id FROM reservations WHERE id = $1", [id]);
+    const existing = await dbClient.query("SELECT id, status FROM reservations WHERE id = $1", [id]);
     if (existing.rowCount === 0) {
       await dbClient.query("ROLLBACK");
       return res.status(404).json({ error: "Reserva no encontrada" });
+    }
+    if (existing.rows[0].status !== "cancelled") {
+      await dbClient.query("ROLLBACK");
+      return res.status(400).json({ error: "Solo se pueden eliminar reservas canceladas. Cancela la reserva primero." });
     }
 
     // Eliminar ventas asociadas antes de borrar la reserva

@@ -2266,7 +2266,7 @@ async function loadAll() {
         <button type="button" class="btn btn--sm btn--ghost btn-change-guest" data-reservation-id="${row.id}" title="Cambiar huésped vinculado">Huésped</button>
         <button type="button" class="btn btn--sm btn--ghost btn-change-cabin" data-reservation-id="${row.id}" title="Cambiar cabaña asignada">Cabaña</button>
         <button type="button" class="btn btn--sm btn--ghost btn-edit-reservation" data-reservation-id="${row.id}">Editar</button>
-        ${deleteButton("reservations", row.id)}
+        ${row.status === "cancelled" ? deleteButton("reservations", row.id, "Eliminar definitivamente") : ""}
       </div>
     </li>`);
 
@@ -3267,7 +3267,7 @@ function bindDeleteButtons() {
         : "Eliminar";
     const warning =
       deleteType === "reservations"
-        ? "Se eliminará la reserva y todas sus ventas asociadas. Esta accion no se puede deshacer."
+        ? "Se eliminará permanentemente la reserva cancelada y todas sus ventas asociadas. Esta acción no se puede deshacer."
         : deleteType === "documents"
           ? "El documento quedará en estado voided (trazable)."
           : "Esta accion no se puede deshacer.";
