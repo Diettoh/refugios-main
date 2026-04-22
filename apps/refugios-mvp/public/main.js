@@ -1351,11 +1351,11 @@ function getDayGuestLines(activeReservations, cabins, dateKey) {
     // Día de rotación o solapamiento: devolver múltiples huéspedes si existen.
     const turnovers = turnoverByCabinId.get(cabinId) || null;
     if (turnovers && turnovers.length >= 2) {
-      // Check-in (arriving today) va primero; check-out (departing) va abajo
+      // OUT primero (sale), luego IN (llega) — orden de gestión natural
       const sorted = [...turnovers].sort((a, b) => {
-        const aIsIn = toDateKey(a.check_in) === targetKey ? 0 : 1;
-        const bIsIn = toDateKey(b.check_in) === targetKey ? 0 : 1;
-        return aIsIn - bIsIn;
+        const aIsOut = toDateKey(a.check_out) === targetKey ? 0 : 1;
+        const bIsOut = toDateKey(b.check_out) === targetKey ? 0 : 1;
+        return aIsOut - bIsOut;
       });
       const subRows = sorted.map(r => {
         const name = String(r.guest_name || "").trim().toUpperCase();
@@ -1435,42 +1435,43 @@ function renderCalendarDay(dateKey, dayLabel, dayClasses, reservations, cabins, 
           if (isFiltering && !isMatch) classes.push("is-dim");
           if (isFiltering && isMatch) classes.push("is-match");
 
+          // border-radius según posición en la estadía: barra continua
+          const barRadius = (isIn, isOut) => {
+            if (isIn && isOut) return "4px";                   // estadía de 1 día
+            if (isIn)         return "4px 2px 2px 4px";       // inicio de estadía
+            if (isOut)        return "2px 4px 4px 2px";       // fin de estadía
+            return "2px";                                      // día intermedio
+          };
+
           // Día de rotación o múltiples huéspedes: sub-filas dinámicas.
           if (line.isTurnover) {
             classes.push("is-turnover");
             const rowsHtml = (line.subRows || []).map(sub => {
               const flags = [];
-              if (sub.isCheckIn) flags.push(`<span class="calendar-flag is-in">IN</span>`);
               if (sub.isLastNight) flags.push(`<span class="calendar-flag is-out">OUT</span>`);
-              // IN: fondo sólido de la cabaña; OUT: fondo semitransparente para distinguir visualmente
-              const rowBg = sub.isCheckIn ? line.palette.bg : line.palette.soft;
+              if (sub.isCheckIn)   flags.push(`<span class="calendar-flag is-in">IN</span>`);
+              const rowBg   = sub.isCheckIn ? line.palette.bg   : line.palette.soft;
               const rowText = sub.isCheckIn ? line.palette.text : "rgba(226,232,240,0.9)";
-              return `<span class="calendar-turnover-row" style="background:${rowBg};color:${rowText}">${flags.join("")}<span class="calendar-guest-row__text">${sub.label}</span></span>`;
+              const radius  = barRadius(sub.isCheckIn, sub.isLastNight);
+              return `<span class="calendar-turnover-row" style="background:${rowBg};color:${rowText};border-radius:${radius}">${flags.join("")}<span class="calendar-guest-row__text">${sub.label}</span></span>`;
             }).join("");
 
             if (isPdf) {
-              return `<span class="${classes.join(" ")}"${cabinAttr} style="border-left:3px solid ${line.palette.border}">
-                ${rowsHtml}
-              </span>`;
+              return `<span class="${classes.join(" ")}"${cabinAttr} style="border-left:3px solid ${line.palette.border}">${rowsHtml}</span>`;
             }
-            return `<span class="${classes.join(" ")}"${cabinAttr} style="border-left:3px solid ${line.palette.border}">
-              ${rowsHtml}
-            </span>`;
+            return `<span class="${classes.join(" ")}"${cabinAttr} style="border-left:3px solid ${line.palette.border}">${rowsHtml}</span>`;
           }
 
           const flags = [];
-          if (line.isCheckIn) flags.push(`<span class="calendar-flag is-in" title="Check-in">IN</span>`);
           if (line.isLastNight) flags.push(`<span class="calendar-flag is-out" title="Check-out">OUT</span>`);
+          if (line.isCheckIn)   flags.push(`<span class="calendar-flag is-in"  title="Check-in">IN</span>`);
+          const radius = barRadius(line.isCheckIn, line.isLastNight);
 
           if (isPdf) {
             const pdfColor = line.status === "confirmed" ? "#b91c1c" : line.palette.text;
-            return `<span class="${classes.join(" ")}"${cabinAttr} style="background:${line.palette.bg};color:${pdfColor};border-left:4px solid ${line.palette.border}">
-              ${flags.join("")}<span class="calendar-guest-row__text">${line.label}</span>
-            </span>`;
+            return `<span class="${classes.join(" ")}"${cabinAttr} style="background:${line.palette.bg};color:${pdfColor};border-radius:${radius};border-left:4px solid ${line.palette.border}">${flags.join("")}<span class="calendar-guest-row__text">${line.label}</span></span>`;
           }
-          return `<span class="${classes.join(" ")}"${cabinAttr} style="background:${line.palette.bg};color:${line.palette.text}">
-            ${flags.join("")}<span class="calendar-guest-row__text">${line.label}</span>${addBtn}
-          </span>`;
+          return `<span class="${classes.join(" ")}"${cabinAttr} style="background:${line.palette.bg};color:${line.palette.text};border-radius:${radius}">${flags.join("")}<span class="calendar-guest-row__text">${line.label}</span>${addBtn}</span>`;
         })
         .join("")
     : `<span class="calendar-guest-row is-empty"></span>`;
