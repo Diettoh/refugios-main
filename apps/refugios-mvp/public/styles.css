@@ -1343,14 +1343,10 @@ h2.section__title {
   line-height: 1.2;
 }
 
-.calendar-flag.is-in {
-  background: rgba(255, 255, 255, 0.92);
-  color: #047857;
-}
-
+.calendar-flag.is-in,
 .calendar-flag.is-out {
-  background: rgba(255, 255, 255, 0.92);
-  color: #b91c1c;
+  background: rgba(0, 0, 0, 0.18);
+  color: inherit;
 }
 
 .calendar-guest-row.is-turnover {
