@@ -2033,8 +2033,8 @@ function bindCabinForm() {
         }
       }
       form.reset();
-      await loadAll();
       closeModal(document.getElementById("cabin-form-modal"));
+      loadAll();
     } catch (error) {
       setStatus(error.message, "error");
     }
@@ -2119,9 +2119,9 @@ function bindCabinGalleryAndEdit() {
             }))
           })
         });
-        await loadAll();
         closeModal(document.getElementById("cabin-edit-modal"));
-        setStatus("Imágenes guardadas", "ok");
+        setStatus("Imágenes guardadas ✓", "ok");
+        loadAll();
       } catch (error) {
         setStatus(error.message, "error");
       }
@@ -2165,6 +2165,8 @@ function setupAvailabilityControls() {
 }
 
 async function loadAll() {
+  document.body.classList.add("is-loading");
+  try {
   const [yy, mm] = (state.calendarMonth || new Date().toISOString().slice(0, 7)).split("-").map(Number);
   const baseDate = new Date(yy, mm - 1, 1);
   const wideFrom = new Date(baseDate.getTime() - 90 * 86400000).toISOString().slice(0, 10);
@@ -2353,6 +2355,9 @@ async function loadAll() {
     cabinSelect.dispatchEvent(new Event("change"));
   }
   refreshMonthlyReportTables();
+  } finally {
+    document.body.classList.remove("is-loading");
+  }
 }
 
 function refreshMonthlyReportTables() {
@@ -2409,9 +2414,9 @@ function bindForm(id, endpoint, successMessage) {
     try {
       await api(endpoint, { method: "POST", body: JSON.stringify(payload) });
       form.reset();
-      await loadAll();
       closeModal(form.closest(".form-modal"));
-      setStatus(successMessage, "ok");
+      setStatus(`${successMessage} ✓`, "ok");
+      loadAll();
     } catch (error) {
       setStatus(error.message, "error");
     }
@@ -2452,9 +2457,9 @@ function bindGuestForm() {
         await api("/api/guests", { method: "POST", body: JSON.stringify(payload) });
       }
       form.reset();
-      await loadAll();
       closeModal(form.closest(".form-modal"));
-      setStatus("Huésped guardado", "ok");
+      setStatus("Huésped guardado ✓", "ok");
+      loadAll();
     } catch (error) {
       setStatus(error.message, "error");
     }
@@ -2780,9 +2785,9 @@ function bindReservationForm() {
       }
       form.reset();
       setReservationGuestStatus("Ingresa RUT para buscar huésped.");
-      await loadAll();
       closeModal(form.closest(".form-modal"));
-      setStatus(isEditing ? "Reserva actualizada" : "Reserva guardada", "ok");
+      setStatus(isEditing ? "Reserva actualizada ✓" : "Reserva guardada ✓", "ok");
+      loadAll(); // actualiza datos en background sin bloquear el cierre
     } catch (error) {
       setStatus(error.message, "error");
       setReservationGuestStatus(error.message, "error");
@@ -3262,9 +3267,9 @@ function bindExpenseForm() {
         const title = modal.querySelector(".modal__header h3");
         if (title) title.textContent = "Registrar gasto";
       }
-      await loadAll();
       closeModal(form.closest(".form-modal"));
-      setStatus(isEdit ? "Gasto actualizado" : "Gasto registrado", "ok");
+      setStatus(isEdit ? "Gasto actualizado ✓" : "Gasto registrado ✓", "ok");
+      loadAll();
     } catch (error) {
       setStatus(error.message, "error");
     }
