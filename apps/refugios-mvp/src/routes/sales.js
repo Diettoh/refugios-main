@@ -33,7 +33,7 @@ function parsePeriodBy(value) {
   const normalized = String(value || "")
     .trim()
     .toLowerCase();
-  if (!normalized) return "check_out";
+  if (!normalized) return "check_in";
   if (["check_out", "checkout", "out"].includes(normalized)) return "check_out";
   if (["check_in", "checkin", "in"].includes(normalized)) return "check_in";
   if (["sale_date", "sale", "fecha_venta"].includes(normalized)) return "sale_date";

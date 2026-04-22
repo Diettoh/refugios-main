@@ -449,6 +449,14 @@
             <span class="stat-card__number" id="ventas-kpi-sales-count">0</span>
             <span class="stat-card__label">Registros de venta</span>
           </div>
+          <div class="stat-card" id="ventas-kpi-airbnb-card" hidden>
+            <span class="stat-card__number" id="ventas-kpi-airbnb-commission">$0</span>
+            <span class="stat-card__label">Comisión Airbnb (3%)</span>
+          </div>
+          <div class="stat-card" id="ventas-kpi-airbnb-net-card" hidden>
+            <span class="stat-card__number" id="ventas-kpi-airbnb-net">$0</span>
+            <span class="stat-card__label">Neto Airbnb</span>
+          </div>
         </div>
 
         <div class="table-wrap" style="margin-bottom: 1.5rem;">
@@ -765,6 +773,17 @@
               <span>Abono inicial (opcional)</span>
               <input type="number" name="initial_payment" min="0" value="0" inputmode="numeric" placeholder="0" />
               <p class="form-helper">Monto que el cliente paga al reservar. Deja en 0 si aún no abona nada.</p>
+            </label>
+          </div>
+          <div class="form-row" id="reservation-status-row" hidden>
+            <label class="form-field">
+              <span>Estado de la reserva</span>
+              <select name="status">
+                <option value="confirmed">Confirmada</option>
+                <option value="pending">Pendiente</option>
+                <option value="cancelled">Cancelada</option>
+                <option value="completed">Completada</option>
+              </select>
             </label>
           </div>
           <div class="modal__actions">

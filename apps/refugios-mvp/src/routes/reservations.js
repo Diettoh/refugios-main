@@ -868,7 +868,8 @@ router.patch("/:id", async (req, res, next) => {
       }
 
       if (field === "check_in_time" || field === "checkout_time") {
-        if (value === "") value = null;
+        // Empty string = no change (skip field rather than nullify existing value)
+        if (value === "" || value == null) continue;
         if (!isTimeOnly(value)) {
           return res.status(400).json({ error: `${field} invalido. Usa formato HH:MM` });
         }
@@ -906,6 +907,15 @@ router.patch("/:id", async (req, res, next) => {
       updates.push(`${field} = $${params.length}`);
     }
 
+    // Sync lead_stage when status is explicitly updated (and lead_stage not also sent)
+    if ("status" in (req.body || {}) && !("lead_stage" in (req.body || {}))) {
+      const derivedLeadStage = normalizeLeadStage(null, req.body.status);
+      if (derivedLeadStage) {
+        params.push(derivedLeadStage);
+        updates.push(`lead_stage = $${params.length}`);
+      }
+    }
+
     if (updates.length === 0) {
       return res.status(400).json({ error: "no hay campos para actualizar" });
     }
@@ -919,13 +929,34 @@ router.patch("/:id", async (req, res, next) => {
       }
     }
 
-    if ((body.check_in != null && body.check_in !== "") || (body.check_out != null && body.check_out !== "")) {
-      const fromDb = await query(`SELECT check_in, check_out FROM reservations WHERE id = $1`, [id]);
+    if (("check_in" in body && body.check_in != null && body.check_in !== "") ||
+        ("check_out" in body && body.check_out != null && body.check_out !== "") ||
+        ("cabin_id" in body)) {
+      const fromDb = await query(`SELECT check_in, check_out, cabin_id FROM reservations WHERE id = $1`, [id]);
       if (fromDb.rowCount === 0) return res.status(404).json({ error: "reserva no encontrada" });
-      const nextCheckIn = body.check_in == null || body.check_in === "" ? fromDb.rows[0].check_in : body.check_in;
-      const nextCheckOut = body.check_out == null || body.check_out === "" ? fromDb.rows[0].check_out : body.check_out;
+      const current = fromDb.rows[0];
+      const nextCheckIn = body.check_in == null || body.check_in === "" ? current.check_in : body.check_in;
+      const nextCheckOut = body.check_out == null || body.check_out === "" ? current.check_out : body.check_out;
       if (String(nextCheckIn) > String(nextCheckOut)) {
         return res.status(400).json({ error: "check_out debe ser igual o posterior a check_in" });
+      }
+
+      // Overbooking: validate cabin availability after date/cabin changes
+      const nextCabinId = body.cabin_id ? Number(body.cabin_id) : current.cabin_id;
+      if (nextCabinId && nextCheckIn && nextCheckOut) {
+        const conflict = await query(
+          `SELECT id FROM reservations
+           WHERE status IN ('pending', 'confirmed')
+             AND cabin_id = $1
+             AND id != $2
+             AND daterange(check_in, check_out, '[)') && daterange($3::date, $4::date, '[)')`,
+          [nextCabinId, id, String(nextCheckIn).slice(0, 10), String(nextCheckOut).slice(0, 10)]
+        );
+        if (conflict.rowCount > 0) {
+          return res.status(409).json({
+            error: `Conflicto: la cabaña ya tiene reserva #${conflict.rows[0].id} en esas fechas`
+          });
+        }
       }
     }
 

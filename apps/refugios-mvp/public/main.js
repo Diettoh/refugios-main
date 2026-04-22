@@ -629,6 +629,7 @@ function periodQs() {
   const params = new URLSearchParams();
   if (state.periodFrom) params.set("from", state.periodFrom);
   if (state.periodTo) params.set("to", state.periodTo);
+  params.set("period_by", "check_in");
   const qs = params.toString();
   return qs ? `?${qs}` : "";
 }
@@ -2009,6 +2010,14 @@ async function loadAll() {
         ${chip(`Sale ${formatDate(row.check_out)}${row.checkout_time ? " " + String(row.checkout_time).slice(0, 5) : ""}`)}
         ${row.nights != null ? chip(`${row.nights} noche${Number(row.nights) === 1 ? "" : "s"}`) : ""}
         ${Number(row.total_amount) === 0 ? chip("Sin monto — editar", "debt-pending") : chip(`Total ${money.format(row.total_amount)}`)}
+        ${(() => {
+          if (row.source === "airbnb" && Number(row.total_amount) > 0) {
+            const commission = Math.round(row.total_amount * 0.03);
+            const net = row.total_amount - commission;
+            return chip(`Comisión Airbnb -${money.format(commission)} → Neto ${money.format(net)}`, "badge--ghost");
+          }
+          return "";
+        })()}
         <button type="button" class="chip chip--btn" id="abono-btn-${row.id}" onclick="togglePaymentHistory(${row.id})">
           Abonado ${money.format(row.paid_amount || 0)} ▾
         </button>
@@ -2316,6 +2325,9 @@ function resetReservationForm() {
     documentInput.required = true;
   }
 
+  const statusRow = form.querySelector("#reservation-status-row");
+  if (statusRow) statusRow.hidden = true;
+
   setReservationGuestStatus("Ingresa RUT para buscar huésped.");
 }
 
@@ -2373,6 +2385,10 @@ function openReservationEditor(reservationId) {
     documentInput.required = !isNoRut;
   }
 
+  setFieldValue('[name="status"]', reservation.status || "confirmed");
+  const statusRow = form.querySelector("#reservation-status-row");
+  if (statusRow) statusRow.hidden = false;
+
   setReservationGuestStatus(`Editando reserva de ${reservation.guest_name || "huésped"} (#${reservation.id}).`, "ok");
   openModal(modal);
 
@@ -2404,27 +2420,39 @@ function bindReservationForm() {
     const rut = isNoRut ? null : normalizeDocumentId(payload.guest_document_id);
     payload.guest_document_id = rut;
 
+    const resetSubmit = () => {
+      isSubmitting = false;
+      if (submitBtn) submitBtn.disabled = false;
+    };
+
     if (!rut && !isNoRut) {
       setStatus("Debes ingresar RUT del huésped", "error");
       setReservationGuestStatus("Debes ingresar RUT válido.", "error");
+      resetSubmit();
       return;
     }
 
     const nightlyRateValue = Number(payload.nightly_rate);
     const hasNightlyRate = Number.isFinite(nightlyRateValue) && nightlyRateValue > 0;
     if (!hasNightlyRate) {
-      const shouldContinueWithoutRate = window.confirm(
-        "Actualmente no hay una tarifa por noche configurada. Desea continuar igualmente?"
-      );
-      if (!shouldContinueWithoutRate) {
-        setStatus("Debes ingresar una tarifa por noche o confirmar continuar con tarifa 0.", "error");
-        if (nightlyRateInput) {
-          nightlyRateInput.focus();
-          nightlyRateInput.select?.();
+      if (isEditing) {
+        // When editing: empty nightly_rate = keep existing DB value (don't overwrite)
+        delete payload.nightly_rate;
+      } else {
+        const shouldContinueWithoutRate = window.confirm(
+          "Actualmente no hay una tarifa por noche configurada. Desea continuar igualmente?"
+        );
+        if (!shouldContinueWithoutRate) {
+          setStatus("Debes ingresar una tarifa por noche o confirmar continuar con tarifa 0.", "error");
+          if (nightlyRateInput) {
+            nightlyRateInput.focus();
+            nightlyRateInput.select?.();
+          }
+          resetSubmit();
+          return;
         }
-        return;
+        payload.nightly_rate = 0;
       }
-      payload.nightly_rate = 0;
     }
 
     setStatus("Guardando...", "");
@@ -2488,6 +2516,10 @@ function bindReservationForm() {
         delete reservationPayload.guest_email;
         delete reservationPayload.guest_phone;
         delete reservationPayload.tax_document_type;
+        delete reservationPayload.initial_payment;
+        // Don't nullify time fields when they're empty — keep the DB value intact
+        if (!reservationPayload.check_in_time) delete reservationPayload.check_in_time;
+        if (!reservationPayload.checkout_time) delete reservationPayload.checkout_time;
         await api(`/api/reservations/${reservationId}`, { method: "PATCH", body: JSON.stringify(reservationPayload) });
       } else {
         await api("/api/reservations", { method: "POST", body: JSON.stringify(reservationPayload) });
@@ -3735,6 +3767,22 @@ function renderMonthlyTables(from, to, sales, expenses) {
   if (salesTotalEl) salesTotalEl.textContent = money.format(totalSales);
   if (salesCountEl) salesCountEl.textContent = String(sales.length);
 
+  // Airbnb commission KPIs (3% of lodging amount from Airbnb reservations)
+  const airbnbLodging = sales
+    .filter(r => r.reservation_source === "airbnb" && r.category === "lodging")
+    .reduce((acc, r) => acc + Number(r.amount || 0), 0);
+  const airbnbCommission = Math.round(airbnbLodging * 0.03);
+  const airbnbNet = airbnbLodging - airbnbCommission;
+  const airbnbCard = document.getElementById("ventas-kpi-airbnb-card");
+  const airbnbNetCard = document.getElementById("ventas-kpi-airbnb-net-card");
+  const airbnbCommissionEl = document.getElementById("ventas-kpi-airbnb-commission");
+  const airbnbNetEl = document.getElementById("ventas-kpi-airbnb-net");
+  const hasAirbnb = airbnbLodging > 0;
+  if (airbnbCard) airbnbCard.hidden = !hasAirbnb;
+  if (airbnbNetCard) airbnbNetCard.hidden = !hasAirbnb;
+  if (airbnbCommissionEl) airbnbCommissionEl.textContent = money.format(airbnbCommission);
+  if (airbnbNetEl) airbnbNetEl.textContent = money.format(airbnbNet);
+
   const cabinById = new Map((state.cabins || []).map((c) => [Number(c.id), c]));
   const summary = {
     casa: { label: "CASA", count: 0, nights: 0, revenue: 0 },
@@ -3834,11 +3882,31 @@ function renderMonthlyTables(from, to, sales, expenses) {
     </tr>`;
   };
 
+  const buildAirbnbCommissionRow = (lodgingAmount) => {
+    const commission = Math.round(lodgingAmount * 0.03);
+    const net = lodgingAmount - commission;
+    return `
+    <tr style="background: color-mix(in srgb, #f59e0b 6%, transparent); border-top: none;">
+      <td></td>
+      <td colspan="6" style="padding-left:2rem; font-size:0.82em; color: var(--color-text-muted, #888); border-top:none;">
+        <span style="border-left: 3px solid #f59e0b; padding-left: 0.5rem;">
+          🏨 <em>Comisión Airbnb (3%)</em>
+        </span>
+      </td>
+      <td><strong style="color:#f59e0b;">-${money.format(commission)}</strong> <span style="font-size:0.8em; color:gray;">→ Neto ${money.format(net)}</span></td>
+      <td colspan="3"></td>
+      <td></td>
+    </tr>`;
+  };
+
   const rowsHtml = [];
   for (const [, group] of grouped) {
     const main = group.find(r => r.category === "lodging") || group[0];
     const subs = group.filter(r => r !== main && (r.category === "suplemento" || r.category === "abono"));
     rowsHtml.push(buildMainRow(main));
+    if (main.category === "lodging" && main.reservation_source === "airbnb" && Number(main.amount) > 0) {
+      rowsHtml.push(buildAirbnbCommissionRow(Number(main.amount)));
+    }
     for (const sub of subs) rowsHtml.push(buildSubRow(sub));
     // ventas manuales sin categoría lodging/suplemento/abono en el mismo grupo
     for (const other of group.filter(r => r !== main && r.category !== "suplemento" && r.category !== "abono")) {
