@@ -255,6 +255,97 @@ router.post("/", async (req, res, next) => {
   }
 });
 
+router.patch("/:id", async (req, res, next) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) {
+    return res.status(400).json({ error: "id invalido" });
+  }
+
+  try {
+    const {
+      category,
+      amount,
+      payment_method,
+      expense_date,
+      expense_month,
+      supplier,
+      description
+    } = req.body || {};
+
+    const updates = [];
+    const params = [];
+    let i = 1;
+    const add = (sql, value) => {
+      updates.push(sql.replace("?", `$${i++}`));
+      params.push(value);
+    };
+
+    if (category !== undefined) {
+      const normalizedCategory = canonicalCategoryLabel(category);
+      if (!normalizedCategory) return res.status(400).json({ error: "category invalida" });
+      add("category = ?", normalizedCategory);
+    }
+
+    if (amount !== undefined) {
+      const normalizedAmount = parseNumber(amount);
+      if (normalizedAmount == null) return res.status(400).json({ error: "amount invalido" });
+      if (normalizedAmount < 0) return res.status(400).json({ error: "amount debe ser mayor o igual a 0" });
+      add("amount = ?", normalizedAmount);
+    }
+
+    if (payment_method !== undefined) {
+      const normalizedPaymentMethod = nonEmptyString(payment_method);
+      if (!normalizedPaymentMethod) return res.status(400).json({ error: "payment_method es requerido" });
+      if (!PAYMENT_METHODS.has(normalizedPaymentMethod)) {
+        return res.status(400).json({ error: "payment_method invalido" });
+      }
+      add("payment_method = ?", normalizedPaymentMethod);
+    }
+
+    if (expense_month !== undefined || expense_date !== undefined) {
+      const normalizedExpenseMonth = isMonthOnly(expense_month) ? expense_month : null;
+      const normalizedExpenseDate = isDateOnly(expense_date)
+        ? expense_date
+        : normalizedExpenseMonth
+          ? `${normalizedExpenseMonth}-01`
+          : null;
+      if (!normalizedExpenseDate) {
+        return res.status(400).json({ error: "expense_date o expense_month invalido" });
+      }
+      add("expense_date = ?", normalizedExpenseDate);
+    }
+
+    if (supplier !== undefined) {
+      add("supplier = ?", nonEmptyString(supplier));
+    }
+
+    if (description !== undefined) {
+      add("description = ?", nonEmptyString(description));
+    }
+
+    if (updates.length === 0) {
+      return res.status(400).json({ error: "No hay campos para actualizar" });
+    }
+
+    params.push(id);
+    const result = await query(
+      `UPDATE expenses
+       SET ${updates.join(", ")}
+       WHERE id = $${i}
+       RETURNING *`,
+      params
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: "Gasto no encontrado" });
+    }
+
+    return res.json(result.rows[0]);
+  } catch (error) {
+    return next(error);
+  }
+});
+
 router.delete("/:id", async (req, res, next) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id) || id <= 0) {

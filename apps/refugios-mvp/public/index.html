@@ -16,11 +16,6 @@
   </head>
   <body>
     <!-- ============================================================
-         MOBILE OVERLAY (click to close sidebar)
-         ============================================================ -->
-    <div class="overlay" id="sidebar-overlay"></div>
-
-    <!-- ============================================================
          SIDEBAR — persistent left navigation
          ============================================================ -->
     <aside class="sidebar" id="sidebar">
@@ -85,6 +80,11 @@
         <span class="badge badge--ok" id="ui-version">UI v0.8.2</span>
       </div>
     </aside>
+
+    <!-- ============================================================
+         MOBILE OVERLAY (click to close sidebar)
+         ============================================================ -->
+    <div class="overlay" id="sidebar-overlay"></div>
 
     <!-- Warmup / login overlay -->
     <div class="warmup-overlay" id="warmup-overlay" hidden>
@@ -195,7 +195,8 @@
             <button type="button" class="btn btn--ghost btn--sm calendar-nav" id="calendar-prev" aria-label="Mes anterior">&larr;</button>
             <h3 class="calendar-title" id="calendar-title">Enero 2026</h3>
             <button type="button" class="btn btn--ghost btn--sm calendar-nav" id="calendar-next" aria-label="Mes siguiente">&rarr;</button>
-            <button type="button" class="btn btn--ghost btn--sm" id="calendar-view-toggle" title="Alternar vista tipo PDF del cliente">Vista PDF</button>
+            <button type="button" class="btn btn--ghost btn--sm" id="calendar-view-toggle">Vista mensual</button>
+            <button type="button" class="btn btn--ghost btn--sm" id="calendar-pdf-toggle" title="Timeline / PDF">PDF</button>
           </div>
           <div class="calendar-grid" id="calendar-grid">
             <div class="calendar-weekdays">
@@ -203,6 +204,8 @@
             </div>
             <div class="calendar-days" id="calendar-days"></div>
           </div>
+          <div class="calendar-timeline" id="calendar-timeline" hidden></div>
+          <div id="calendar-week" hidden></div>
           
           <!-- Detalle de ocupación y reservas por día (Preview) -->
           <div class="calendar-preview-wrap">
@@ -448,6 +451,14 @@
             <span class="stat-card__number" id="ventas-kpi-sales-count">0</span>
             <span class="stat-card__label">Registros de venta</span>
           </div>
+          <div class="stat-card" id="ventas-kpi-airbnb-card" hidden>
+            <span class="stat-card__number" id="ventas-kpi-airbnb-commission">$0</span>
+            <span class="stat-card__label">Comisión Airbnb (3%)</span>
+          </div>
+          <div class="stat-card" id="ventas-kpi-airbnb-net-card" hidden>
+            <span class="stat-card__number" id="ventas-kpi-airbnb-net">$0</span>
+            <span class="stat-card__label">Neto Airbnb</span>
+          </div>
         </div>
 
         <div class="table-wrap" style="margin-bottom: 1.5rem;">
@@ -513,10 +524,6 @@
           <div class="stat-card">
             <span class="stat-card__number" id="expenses-kpi-count">0</span>
             <span class="stat-card__label">Registros</span>
-          </div>
-          <div class="stat-card">
-            <span class="stat-card__number" id="expenses-kpi-average">$0</span>
-            <span class="stat-card__label">Promedio</span>
           </div>
         </div>
 
@@ -764,6 +771,22 @@
               <span>Notas de la reserva (opcional)</span>
               <input type="text" name="notes" id="reservation-notes" placeholder="Ej: Pago adelantado, descuento especial, etc." />
             </label>
+            <label class="form-field">
+              <span>Abono inicial (opcional)</span>
+              <input type="number" name="initial_payment" min="0" value="0" inputmode="numeric" placeholder="0" />
+              <p class="form-helper">Monto que el cliente paga al reservar. Deja en 0 si aún no abona nada.</p>
+            </label>
+          </div>
+          <div class="form-row" id="reservation-status-row" hidden>
+            <label class="form-field">
+              <span>Estado de la reserva</span>
+              <select name="status">
+                <option value="confirmed">Confirmada</option>
+                <option value="pending">Pendiente</option>
+                <option value="cancelled">Cancelada</option>
+                <option value="completed">Completada</option>
+              </select>
+            </label>
           </div>
           <div class="modal__actions">
             <button type="button" class="btn btn--ghost" data-modal-close>Cancelar</button>
@@ -786,6 +809,63 @@
       </div>
     </div>
 
+    <!-- Change guest modal -->
+    <div class="form-modal" id="change-guest-modal" hidden>
+      <div class="modal__panel">
+        <div class="modal__header">
+          <h3 id="change-guest-modal-title">Cambiar huésped</h3>
+          <button class="modal__close" data-modal-close aria-label="Cerrar">&times;</button>
+        </div>
+        <form id="change-guest-form" class="modal__form">
+          <input type="hidden" name="reservation_id" />
+          <input type="hidden" name="guest_id" />
+          <div class="form-row">
+            <label class="form-field">
+              <span>Buscar huésped por nombre</span>
+              <input type="text" id="change-guest-search" placeholder="Escribe para filtrar..." autocomplete="off" />
+            </label>
+          </div>
+          <div class="form-row">
+            <label class="form-field">
+              <span>Huésped</span>
+              <select id="change-guest-select" required>
+                <option value="">Seleccionar</option>
+              </select>
+            </label>
+          </div>
+          <div class="form-actions">
+            <button type="button" class="btn btn--ghost" data-modal-close>Cancelar</button>
+            <button type="submit" class="btn btn--primary">Guardar</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Change cabin modal -->
+    <div class="form-modal" id="change-cabin-modal" hidden>
+      <div class="modal__panel">
+        <div class="modal__header">
+          <h3 id="change-cabin-modal-title">Cambiar cabaña</h3>
+          <button class="modal__close" data-modal-close aria-label="Cerrar">&times;</button>
+        </div>
+        <form id="change-cabin-form" class="modal__form">
+          <input type="hidden" name="reservation_id" />
+          <div class="form-row">
+            <label class="form-field">
+              <span>Cabaña</span>
+              <select name="cabin_id" id="change-cabin-select" required>
+                <option value="">Seleccionar</option>
+              </select>
+            </label>
+          </div>
+          <div class="form-actions">
+            <button type="button" class="btn btn--ghost" data-modal-close>Cancelar</button>
+            <button type="submit" class="btn btn--primary">Guardar</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
     <!-- Sale modal -->
     <div class="form-modal" id="sale-modal" hidden>
       <div class="modal__panel">
@@ -794,6 +874,7 @@
           <button class="modal__close" data-modal-close aria-label="Cerrar">&times;</button>
         </div>
         <form id="sale-form" class="modal__form">
+          <input type="hidden" name="id" />
           <div class="form-row">
             <label class="form-field">
               <span>Fecha</span>
@@ -802,6 +883,7 @@
             <label class="form-field">
               <span>Categoría</span>
               <select name="category" required>
+                <option value="abono">Abono</option>
                 <option value="lodging">Alojamiento</option>
                 <option value="suplemento">Suplemento</option>
                 <option value="limpieza">Limpieza</option>
@@ -857,6 +939,7 @@
           <button class="modal__close" data-modal-close aria-label="Cerrar">&times;</button>
         </div>
         <form id="expense-form" class="modal__form">
+          <input type="hidden" name="id" />
           <div class="form-row">
             <label class="form-field">
               <span>Mes</span>
@@ -1085,6 +1168,26 @@
         </form>
       </div>
     </div>
+
+    <!-- Confirm dialog -->
+    <div class="form-modal" id="confirm-modal" hidden>
+      <div class="modal__panel modal__panel--sm">
+        <div class="modal__header">
+          <h3 id="confirm-modal-title">Confirmar acción</h3>
+          <button class="modal__close" onclick="closeConfirm()" aria-label="Cerrar">&times;</button>
+        </div>
+        <div class="modal__content" style="padding:1.25rem 1.5rem;">
+          <p id="confirm-modal-body" style="color:var(--ink-secondary);font-size:0.9rem;line-height:1.5;"></p>
+        </div>
+        <div class="modal__actions" style="padding:1rem 1.5rem;">
+          <button type="button" class="btn btn--ghost" onclick="closeConfirm()">Cancelar</button>
+          <button type="button" class="btn btn--primary" id="confirm-modal-ok">Confirmar</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toast notification -->
+    <div id="toast" class="toast" hidden role="status" aria-live="polite"></div>
 
     <script src="/main.js"></script>
   </body>

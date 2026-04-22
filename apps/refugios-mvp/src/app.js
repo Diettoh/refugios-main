@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import crypto from "node:crypto";
 import usersRouter from "./routes/users.js";
 import guestsRouter from "./routes/guests.js";
 import reservationsRouter from "./routes/reservations.js";
@@ -42,7 +43,16 @@ app.get("/api/health/db", async (_req, res) => {
       "SELECT COUNT(*) AS n FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'schema_migrations'"
     );
     const hasMigrations = Number(r?.rows?.[0]?.n || 0) > 0;
-    return res.json({ db: "ok", migrations: hasMigrations });
+    const dbUrl = String(process.env.DATABASE_URL || "");
+    const dbFingerprint = dbUrl
+      ? crypto.createHash("sha256").update(dbUrl).digest("hex").slice(0, 12)
+      : "";
+    return res.json({
+      db: "ok",
+      migrations: hasMigrations,
+      db_fingerprint: dbFingerprint,
+      runtime: { node: process.version }
+    });
   } catch (err) {
     const code = err?.code || "";
     const msg =
@@ -74,33 +84,44 @@ app.use("/api/expenses", expensesRouter);
 app.use("/api/documents", documentsRouter);
 app.use("/api/exports", exportsRouter);
 
-app.use((error, _req, res, _next) => {
+app.use((error, req, res, _next) => {
   console.error(error);
+  const wantsDebug =
+    process.env.NODE_ENV !== "production" ||
+    String(req.get("x-refugios-debug") || "").trim() === "1" ||
+    String(req.query?.debug || "").trim() === "1";
+
+  const debugPayload = wantsDebug
+    ? {
+        code: error?.code || null,
+        message: error?.message || null
+      }
+    : null;
   if (error?.code === "MISSING_DATABASE_URL") {
-    return res.status(503).json({ error: "Servicio no configurado: falta DATABASE_URL" });
+    return res.status(503).json({ error: "Servicio no configurado: falta DATABASE_URL", ...(debugPayload ? { debug: debugPayload } : {}) });
   }
   if (error?.code === "42P01") {
-    return res.status(503).json({ error: "Base de datos sin migrar. Ejecuta db:migrate." });
+    return res.status(503).json({ error: "Base de datos sin migrar. Ejecuta db:migrate.", ...(debugPayload ? { debug: debugPayload } : {}) });
   }
   if (["ENOTFOUND", "EAI_AGAIN", "ECONNREFUSED"].includes(error?.code)) {
-    return res.status(503).json({ error: "No se pudo conectar a la base de datos." });
+    return res.status(503).json({ error: "No se pudo conectar a la base de datos.", ...(debugPayload ? { debug: debugPayload } : {}) });
   }
   if (error?.code === "28P01") {
-    return res.status(503).json({ error: "Credenciales de base de datos invalidas." });
+    return res.status(503).json({ error: "Credenciales de base de datos invalidas.", ...(debugPayload ? { debug: debugPayload } : {}) });
   }
   if (error?.code === "23503") {
-    return res.status(400).json({ error: "Referencia invalida: verifica huésped, reserva o venta relacionada." });
+    return res.status(400).json({ error: "Referencia invalida: verifica huésped, reserva o venta relacionada.", ...(debugPayload ? { debug: debugPayload } : {}) });
   }
   if (error?.code === "23514") {
-    return res.status(400).json({ error: "Dato fuera de catálogo permitido (canal, estado, documento o forma de pago)." });
+    return res.status(400).json({ error: "Dato fuera de catálogo permitido (canal, estado, documento o forma de pago).", ...(debugPayload ? { debug: debugPayload } : {}) });
   }
   if (error?.code === "22P02") {
-    return res.status(400).json({ error: "Formato de dato invalido en la solicitud." });
+    return res.status(400).json({ error: "Formato de dato invalido en la solicitud.", ...(debugPayload ? { debug: debugPayload } : {}) });
   }
   if (error?.code === "23502") {
-    return res.status(400).json({ error: "Faltan campos obligatorios." });
+    return res.status(400).json({ error: "Faltan campos obligatorios.", ...(debugPayload ? { debug: debugPayload } : {}) });
   }
-  res.status(500).json({ error: "Error interno del servidor" });
+  res.status(500).json({ error: "Error interno del servidor", ...(debugPayload ? { debug: debugPayload } : {}) });
 });
 
 export default app;

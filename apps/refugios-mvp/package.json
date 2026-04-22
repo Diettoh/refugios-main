@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
+    "cabins:inspect": "node inspect-cabins.mjs",
+    "cabins:ensure": "node update-cabins.mjs",
     "db:migrate": "node scripts/migrate.mjs",
     "db:migrate:schema": "node scripts/migrate.mjs --mode=schema",
     "db:migrate:data": "node scripts/migrate.mjs --mode=data",

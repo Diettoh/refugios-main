@@ -1,9 +1,26 @@
 import pg from 'pg';
 const { Client } = pg;
 
+function getArgValue(flag) {
+  const argv = process.argv.slice(2);
+  const idx = argv.findIndex((a) => a === flag || a.startsWith(`${flag}=`));
+  if (idx === -1) return null;
+  const raw = argv[idx];
+  if (raw.includes("=")) return raw.split("=").slice(1).join("=");
+  return argv[idx + 1] || null;
+}
+
 async function run() {
+  const urlFromArgs = getArgValue("--url");
+  const connectionString =
+    urlFromArgs ||
+    process.env.DATABASE_URL ||
+    'postgresql://refugios:refugios_qa@localhost:5433/refugios';
+
+  const pruneExtra = process.argv.includes("--prune-extra");
+
   const db = new Client({
-    connectionString: 'postgresql://refugios:refugios_qa@localhost:5433/refugios'
+    connectionString
   });
   await db.connect();
 
@@ -13,10 +30,10 @@ async function run() {
   const casaAmenities = ["wifi", "parking", "kitchen", "terrace", "trails", "fireplace", "pet_friendly", "hot_tub"];
 
   const cabinsData = [
-    { id: 1, name: 'Refugio 1', short: 'R1', type: 'small', pax: 4, color: '#2563eb', icon: '🌲', desc: refugioDesc, am: refugioAmenities },
-    { id: 2, name: 'Refugio 2', short: 'R2', type: 'small', pax: 4, color: '#10b981', icon: '🌲', desc: refugioDesc, am: refugioAmenities },
-    { id: 3, name: 'Refugio 3', short: 'R3', type: 'small', pax: 4, color: '#f59e0b', icon: '🌲', desc: refugioDesc, am: refugioAmenities },
-    { id: 4, name: 'Casa AvA',  short: 'CASA', type: 'large', pax: 8, color: '#1e293b', icon: '🏠', desc: casaDesc, am: casaAmenities }
+    { id: 1, name: 'Cabaña 1 Azul', short: 'C1', type: 'small', pax: 4, color: '#2563eb', icon: '🏡', desc: refugioDesc, am: refugioAmenities },
+    { id: 2, name: 'Cabaña 2 Roja', short: 'C2', type: 'small', pax: 4, color: '#dc2626', icon: '🏡', desc: refugioDesc, am: refugioAmenities },
+    { id: 3, name: 'Cabaña 3 Verde', short: 'C3', type: 'small', pax: 4, color: '#16a34a', icon: '🏡', desc: refugioDesc, am: refugioAmenities },
+    { id: 4, name: 'Casa AvA',       short: 'CASA', type: 'large', pax: 8, color: '#1e293b', icon: '🏠', desc: casaDesc, am: casaAmenities }
   ];
 
   for (const c of cabinsData) {
@@ -37,10 +54,16 @@ async function run() {
     `, [c.id, c.name, c.desc, c.type, c.pax, c.short, c.color, c.icon, c.am]);
   }
 
-  await db.query(`DELETE FROM cabins WHERE id > 4`);
-  await db.query(`SELECT setval('cabins_id_seq', (SELECT MAX(id) FROM cabins))`);
+  if (pruneExtra) {
+    await db.query(`DELETE FROM cabins WHERE id > 4`);
+  }
 
-  console.log("Cabins updated successfully.");
+  const seqRes = await db.query(`SELECT to_regclass('public.cabins_id_seq') AS seq`);
+  if (seqRes.rows?.[0]?.seq) {
+    await db.query(`SELECT setval('cabins_id_seq', (SELECT MAX(id) FROM cabins))`);
+  }
+
+  console.log("Cabins ensured successfully.");
 
   const res = await db.query('SELECT id, name, short_code FROM cabins ORDER BY id');
   console.table(res.rows);

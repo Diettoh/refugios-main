@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { query } from "../db/client.js";
+import { query, getClient } from "../db/client.js";
 import { notifyReservationCreatedToTrello } from "../utils/trelloBridge.js";
 
 const router = Router();
@@ -140,6 +140,13 @@ router.get("/", async (req, res, next) => {
     const from = isDateOnly(req.query.from) ? req.query.from : null;
     const to = isDateOnly(req.query.to) ? req.query.to : null;
 
+    const dateWhere = [];
+    const dateParams = [];
+    const addDateParam = (value) => {
+      dateParams.push(value);
+      return `$${dateParams.length}`;
+    };
+
     const where = [];
     const params = [];
     const addParam = (value) => {
@@ -147,13 +154,16 @@ router.get("/", async (req, res, next) => {
       return `$${params.length}`;
     };
 
+    const shiftPlaceholders = (sql, offset) =>
+      sql.replace(/\$(\d+)/g, (_m, n) => `$${Number(n) + offset}`);
+
     // Rango principal por traslape (solo si se recibe período).
     if (from && to) {
-      where.push(`r.check_in <= ${addParam(to)}::date AND r.check_out >= ${addParam(from)}::date`);
+      dateWhere.push(`r.check_in <= ${addDateParam(to)}::date AND r.check_out >= ${addDateParam(from)}::date`);
     } else if (from) {
-      where.push(`r.check_out >= ${addParam(from)}::date`);
+      dateWhere.push(`r.check_out >= ${addDateParam(from)}::date`);
     } else if (to) {
-      where.push(`r.check_in <= ${addParam(to)}::date`);
+      dateWhere.push(`r.check_in <= ${addDateParam(to)}::date`);
     }
 
     const checkInFrom = isDateOnly(req.query.check_in_from) ? req.query.check_in_from : null;
@@ -161,10 +171,10 @@ router.get("/", async (req, res, next) => {
     const checkOutFrom = isDateOnly(req.query.check_out_from) ? req.query.check_out_from : null;
     const checkOutTo = isDateOnly(req.query.check_out_to) ? req.query.check_out_to : null;
 
-    if (checkInFrom) where.push(`r.check_in >= ${addParam(checkInFrom)}::date`);
-    if (checkInTo) where.push(`r.check_in <= ${addParam(checkInTo)}::date`);
-    if (checkOutFrom) where.push(`r.check_out >= ${addParam(checkOutFrom)}::date`);
-    if (checkOutTo) where.push(`r.check_out <= ${addParam(checkOutTo)}::date`);
+    if (checkInFrom) dateWhere.push(`r.check_in >= ${addDateParam(checkInFrom)}::date`);
+    if (checkInTo) dateWhere.push(`r.check_in <= ${addDateParam(checkInTo)}::date`);
+    if (checkOutFrom) dateWhere.push(`r.check_out >= ${addDateParam(checkOutFrom)}::date`);
+    if (checkOutTo) dateWhere.push(`r.check_out <= ${addDateParam(checkOutTo)}::date`);
 
     const source = nonEmptyString(req.query.source);
     if (source) where.push(`r.source = ${addParam(source)}`);
@@ -216,35 +226,58 @@ router.get("/", async (req, res, next) => {
       );
     }
 
-    const result = await query(
-      `SELECT
-         r.*,
-         g.full_name AS guest_name,
-         g.document_id AS guest_document,
-         c.name AS cabin_name,
-         c.nightly_rate AS cabin_nightly_rate,
-         GREATEST(0, (r.check_out - r.check_in))::int AS nights,
-         COALESCE(sales_totals.paid_amount, 0)::numeric(12,2) AS paid_amount,
-         GREATEST(r.total_amount - COALESCE(sales_totals.paid_amount, 0), 0)::numeric(12,2) AS amount_due,
-         CASE
-           WHEN COALESCE(sales_totals.paid_amount, 0) >= r.total_amount THEN 'paid'
-           WHEN COALESCE(sales_totals.paid_amount, 0) > 0 THEN 'partial'
-           ELSE 'pending'
-         END AS debt_status
-       FROM reservations r
-       JOIN guests g ON g.id = r.guest_id
-       LEFT JOIN cabins c ON c.id = r.cabin_id
-       LEFT JOIN (
-         SELECT reservation_id, SUM(amount) AS paid_amount
-         FROM sales
-         WHERE reservation_id IS NOT NULL
-         GROUP BY reservation_id
-       ) sales_totals ON sales_totals.reservation_id = r.id
-       ${where.length > 0 ? `WHERE ${where.join(" AND ")}` : ""}
-       ORDER BY r.check_in DESC, r.id DESC`,
-      params
-    );
-    res.json(result.rows);
+    const runQuery = async ({ whereParts, paramsArray }) => {
+      const result = await query(
+        `SELECT
+           r.*,
+           g.full_name AS guest_name,
+           g.document_id AS guest_document,
+           c.name AS cabin_name,
+           c.nightly_rate AS cabin_nightly_rate,
+           GREATEST(0, (r.check_out - r.check_in))::int AS nights,
+           COALESCE(sales_totals.paid_amount, 0)::numeric(12,2) AS paid_amount,
+           GREATEST(r.total_amount - COALESCE(sales_totals.paid_amount, 0), 0)::numeric(12,2) AS amount_due,
+           CASE
+             WHEN COALESCE(sales_totals.paid_amount, 0) >= r.total_amount THEN 'paid'
+             WHEN COALESCE(sales_totals.paid_amount, 0) > 0 THEN 'partial'
+             ELSE 'pending'
+           END AS debt_status
+         FROM reservations r
+         JOIN guests g ON g.id = r.guest_id
+         LEFT JOIN cabins c ON c.id = r.cabin_id
+         LEFT JOIN (
+           SELECT reservation_id, SUM(amount) AS paid_amount
+           FROM sales
+           WHERE reservation_id IS NOT NULL
+             AND category = 'abono'
+           GROUP BY reservation_id
+         ) sales_totals ON sales_totals.reservation_id = r.id
+         ${whereParts.length > 0 ? `WHERE ${whereParts.join(" AND ")}` : ""}
+         ORDER BY r.check_in DESC, r.id DESC`,
+        paramsArray
+      );
+      return result.rows;
+    };
+
+    const hasDateFilter = dateWhere.length > 0;
+
+    const combinedOffset = dateParams.length;
+    const combinedWhere = [...dateWhere, ...where.map((w) => shiftPlaceholders(w, combinedOffset))];
+    const combinedParams = [...dateParams, ...params];
+
+    let rows = await runQuery({ whereParts: combinedWhere, paramsArray: combinedParams });
+
+    // Fallback: si el filtro por fecha deja vacío, devolver resultados con el resto de filtros (sin tocar filtros no-fecha).
+    if (hasDateFilter && rows.length === 0) {
+      console.warn(
+        `[reservations] date filter returned 0; applying fallback without date filters`,
+        { from, to, checkInFrom, checkInTo, checkOutFrom, checkOutTo }
+      );
+      res.setHeader("X-Refugios-Fallback", "reservations_without_date_filters");
+      rows = await runQuery({ whereParts: where, paramsArray: params });
+    }
+
+    res.json(rows);
   } catch (error) {
     next(error);
   }
@@ -315,7 +348,8 @@ router.post("/", async (req, res, next) => {
       season_type = null,
       reservation_document_type = null,
       notes = null,
-      additional_charge = 0, // Nuevo: Cobro adicional
+      additional_charge = 0,
+      initial_payment = 0,
       cabin_id
     } = req.body;
 
@@ -341,12 +375,19 @@ router.post("/", async (req, res, next) => {
       }
 
       const doc = normalizedGuestDocument;
-      
+
       let existingGuest = { rowCount: 0 };
       if (doc) {
         existingGuest = await query("SELECT id FROM guests WHERE document_id = $1 LIMIT 1", [doc]);
       }
-      
+      // Fallback: buscar por nombre exacto (case-insensitive) para evitar duplicados
+      if (existingGuest.rowCount === 0) {
+        existingGuest = await query(
+          "SELECT id FROM guests WHERE lower(trim(full_name)) = lower(trim($1)) LIMIT 1",
+          [normalizedGuestName]
+        );
+      }
+
       if (existingGuest.rowCount > 0) {
         parsedGuestId = existingGuest.rows[0].id;
       } else {
@@ -399,8 +440,8 @@ router.post("/", async (req, res, next) => {
     if (!isDateTimeValue(follow_up_at)) {
       return res.status(400).json({ error: "follow_up_at invalido. Usa formato YYYY-MM-DDTHH:MM" });
     }
-    if (check_in >= check_out) {
-      return res.status(400).json({ error: "check_out debe ser posterior a check_in" });
+    if (check_in > check_out) {
+      return res.status(400).json({ error: "check_out debe ser igual o posterior a check_in" });
     }
     const normalizedLeadStage = normalizeLeadStage(lead_stage, status);
     if (!LEAD_STAGES.has(normalizedLeadStage)) {
@@ -496,7 +537,8 @@ router.post("/", async (req, res, next) => {
     if (total_amount != null && total_amount !== "") {
       const providedTotal = Number(total_amount);
       if (Number.isFinite(providedTotal) && providedTotal > 0) {
-        finalTotalAmount = Math.round(providedTotal) + parsedAdditionalCharge;
+        // total_amount del form ya incluye additional_charge — no sumar encima
+        finalTotalAmount = Math.round(providedTotal);
       }
     }
 
@@ -535,66 +577,68 @@ router.post("/", async (req, res, next) => {
       return res.status(400).json({ error: "reservation_document_type invalido" });
     }
 
-    const result = await query(
-      `INSERT INTO reservations (
-         guest_id,
-         cabin_id,
-         source,
-         payment_method,
-         status,
-         lead_stage,
-         check_in,
-         check_out,
-         check_in_time,
-         checkout_time,
-         follow_up_at,
-         guests_count,
-         total_amount,
-         nightly_rate,
-         nights,
-         cleaning_supplement,
-         season_type,
-         reservation_document_type,
-         notes,
-         additional_charge
-       )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
-       RETURNING *`,
-      [
-        parsedGuestId,
-        parsedCabinId,
-        source,
-        payment_method,
-        normalizedStatus,
-        normalizedLeadStage,
-        check_in,
-        check_out,
-        check_in_time || null,
-        checkout_time || null,
-        follow_up_at || null,
-        parsedGuestsCount,
-        finalTotalAmount,
-        finalNightlyRate,
-        finalNights,
-        parsedCleaningSupplement,
-        normalizedSeasonType,
-        normalizedReservationDocType,
-        notes,
-        parsedAdditionalCharge
-      ]
-    );
-
-    const newReservation = result.rows[0];
-
-    // Auto-crear ventas asociadas a la reserva
+    const dbClient = await getClient();
+    let newReservation;
     try {
+      await dbClient.query("BEGIN");
+
+      const result = await dbClient.query(
+        `INSERT INTO reservations (
+           guest_id,
+           cabin_id,
+           source,
+           payment_method,
+           status,
+           lead_stage,
+           check_in,
+           check_out,
+           check_in_time,
+           checkout_time,
+           follow_up_at,
+           guests_count,
+           total_amount,
+           nightly_rate,
+           nights,
+           cleaning_supplement,
+           season_type,
+           reservation_document_type,
+           notes,
+           additional_charge
+         )
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+         RETURNING *`,
+        [
+          parsedGuestId,
+          parsedCabinId,
+          source,
+          payment_method,
+          normalizedStatus,
+          normalizedLeadStage,
+          check_in,
+          check_out,
+          check_in_time || null,
+          checkout_time || null,
+          follow_up_at || null,
+          parsedGuestsCount,
+          finalTotalAmount,
+          finalNightlyRate,
+          finalNights,
+          parsedCleaningSupplement,
+          normalizedSeasonType,
+          normalizedReservationDocType,
+          notes,
+          parsedAdditionalCharge
+        ]
+      );
+      newReservation = result.rows[0];
+
       // 1. Venta por Alojamiento Base
-      await query(
+      await dbClient.query(
         `INSERT INTO sales (reservation_id, category, amount, payment_method, sale_date, description)
          VALUES ($1, 'lodging', $2, $3, $4, $5)`,
         [
           newReservation.id,
-          Math.max(finalTotalAmount - parsedAdditionalCharge, 0), // Respeta el monto pactado base
+          Math.max(finalTotalAmount - parsedAdditionalCharge, 0),
           payment_method,
           check_in,
           `Arriendo ${cabinResult.rows[0].name} | ${guestName} | ${finalNights} noches`
@@ -603,7 +647,7 @@ router.post("/", async (req, res, next) => {
 
       // 2. Venta por Cobro Adicional (si aplica)
       if (parsedAdditionalCharge > 0) {
-        await query(
+        await dbClient.query(
           `INSERT INTO sales (reservation_id, category, amount, payment_method, sale_date, description)
            VALUES ($1, 'suplemento', $2, $3, $4, $5)`,
           [
@@ -611,12 +655,33 @@ router.post("/", async (req, res, next) => {
             parsedAdditionalCharge,
             payment_method,
             check_in,
-            `Cobro Adicional: ${notes}` // Aquí guardamos la nota obligatoria
+            `Cobro Adicional: ${notes}`
           ]
         );
       }
-    } catch (saleErr) {
-      console.error(`[reservations] Error al desglosar ventas para reserva #${newReservation.id}: ${saleErr.message}`);
+
+      // 3. Abono inicial (si el cliente pagó algo al reservar)
+      const parsedInitialPayment = initial_payment ? Number(initial_payment) : 0;
+      if (parsedInitialPayment > 0) {
+        await dbClient.query(
+          `INSERT INTO sales (reservation_id, category, amount, payment_method, sale_date, description)
+           VALUES ($1, 'abono', $2, $3, $4, $5)`,
+          [
+            newReservation.id,
+            parsedInitialPayment,
+            payment_method,
+            check_in,
+            `Abono inicial — ${guestName}`
+          ]
+        );
+      }
+
+      await dbClient.query("COMMIT");
+    } catch (txErr) {
+      await dbClient.query("ROLLBACK");
+      throw txErr;
+    } finally {
+      dbClient.release();
     }
 
     try {
@@ -767,7 +832,8 @@ router.patch("/:id", async (req, res, next) => {
     "reservation_document_type",
     "notes",
     "additional_charge",
-    "cabin_id"
+    "cabin_id",
+    "guest_id"
   ];
 
   const updates = [];
@@ -779,7 +845,7 @@ router.patch("/:id", async (req, res, next) => {
 
       let value = req.body[field];
 
-      if (field === "guests_count" || field === "cabin_id" || field === "nights") {
+      if (field === "guests_count" || field === "cabin_id" || field === "nights" || field === "guest_id") {
         if (value === "" || value === null) value = null;
         if (value !== null) {
           const n = Number(value);
@@ -809,7 +875,8 @@ router.patch("/:id", async (req, res, next) => {
       }
 
       if (field === "check_in_time" || field === "checkout_time") {
-        if (value === "") value = null;
+        // Empty string = no change (skip field rather than nullify existing value)
+        if (value === "" || value == null) continue;
         if (!isTimeOnly(value)) {
           return res.status(400).json({ error: `${field} invalido. Usa formato HH:MM` });
         }
@@ -847,18 +914,56 @@ router.patch("/:id", async (req, res, next) => {
       updates.push(`${field} = $${params.length}`);
     }
 
+    // Sync lead_stage when status is explicitly updated (and lead_stage not also sent)
+    if ("status" in (req.body || {}) && !("lead_stage" in (req.body || {}))) {
+      const derivedLeadStage = normalizeLeadStage(null, req.body.status);
+      if (derivedLeadStage) {
+        params.push(derivedLeadStage);
+        updates.push(`lead_stage = $${params.length}`);
+      }
+    }
+
     if (updates.length === 0) {
       return res.status(400).json({ error: "no hay campos para actualizar" });
     }
 
     const body = req.body || {};
-    if ((body.check_in != null && body.check_in !== "") || (body.check_out != null && body.check_out !== "")) {
-      const fromDb = await query(`SELECT check_in, check_out FROM reservations WHERE id = $1`, [id]);
+
+    if (body.guest_id != null && body.guest_id !== "") {
+      const guestCheck = await query(`SELECT id FROM guests WHERE id = $1`, [Number(body.guest_id)]);
+      if (guestCheck.rowCount === 0) {
+        return res.status(400).json({ error: "guest_id no existe" });
+      }
+    }
+
+    if (("check_in" in body && body.check_in != null && body.check_in !== "") ||
+        ("check_out" in body && body.check_out != null && body.check_out !== "") ||
+        ("cabin_id" in body)) {
+      const fromDb = await query(`SELECT check_in, check_out, cabin_id FROM reservations WHERE id = $1`, [id]);
       if (fromDb.rowCount === 0) return res.status(404).json({ error: "reserva no encontrada" });
-      const nextCheckIn = body.check_in == null || body.check_in === "" ? fromDb.rows[0].check_in : body.check_in;
-      const nextCheckOut = body.check_out == null || body.check_out === "" ? fromDb.rows[0].check_out : body.check_out;
-      if (String(nextCheckIn) >= String(nextCheckOut)) {
-        return res.status(400).json({ error: "check_out debe ser posterior a check_in" });
+      const current = fromDb.rows[0];
+      const nextCheckIn = body.check_in == null || body.check_in === "" ? current.check_in : body.check_in;
+      const nextCheckOut = body.check_out == null || body.check_out === "" ? current.check_out : body.check_out;
+      if (String(nextCheckIn) > String(nextCheckOut)) {
+        return res.status(400).json({ error: "check_out debe ser igual o posterior a check_in" });
+      }
+
+      // Overbooking: validate cabin availability after date/cabin changes
+      const nextCabinId = body.cabin_id ? Number(body.cabin_id) : current.cabin_id;
+      if (nextCabinId && nextCheckIn && nextCheckOut) {
+        const conflict = await query(
+          `SELECT id FROM reservations
+           WHERE status IN ('pending', 'confirmed')
+             AND cabin_id = $1
+             AND id != $2
+             AND daterange(check_in, check_out, '[)') && daterange($3::date, $4::date, '[)')`,
+          [nextCabinId, id, String(nextCheckIn).slice(0, 10), String(nextCheckOut).slice(0, 10)]
+        );
+        if (conflict.rowCount > 0) {
+          return res.status(409).json({
+            error: `Conflicto: la cabaña ya tiene reserva #${conflict.rows[0].id} en esas fechas`
+          });
+        }
       }
     }
 
@@ -925,12 +1030,64 @@ router.delete("/:id", async (req, res, next) => {
     return res.status(400).json({ error: "id invalido" });
   }
 
+  const dbClient = await getClient();
   try {
-    const result = await query("DELETE FROM reservations WHERE id = $1 RETURNING id", [id]);
-    if (result.rowCount === 0) {
+    await dbClient.query("BEGIN");
+
+    const existing = await dbClient.query("SELECT id, status FROM reservations WHERE id = $1", [id]);
+    if (existing.rowCount === 0) {
+      await dbClient.query("ROLLBACK");
       return res.status(404).json({ error: "Reserva no encontrada" });
     }
+    if (existing.rows[0].status !== "cancelled") {
+      await dbClient.query("ROLLBACK");
+      return res.status(400).json({ error: "Solo se pueden eliminar reservas canceladas. Cancela la reserva primero." });
+    }
+
+    // Eliminar ventas asociadas antes de borrar la reserva
+    await dbClient.query("DELETE FROM sales WHERE reservation_id = $1", [id]);
+    await dbClient.query("DELETE FROM reservations WHERE id = $1", [id]);
+
+    await dbClient.query("COMMIT");
     return res.json({ ok: true, id });
+  } catch (error) {
+    await dbClient.query("ROLLBACK");
+    return next(error);
+  } finally {
+    dbClient.release();
+  }
+});
+
+// Migrar reservas antiguas que no tienen abonos registrados pero tienen ventas lodging.
+// Crea un abono de migración por el total de la reserva, marcándolas como pagadas.
+router.post("/migrate-payments", async (req, res, next) => {
+  try {
+    const candidates = await query(
+      `SELECT r.id, r.total_amount, r.payment_method, r.check_in
+       FROM reservations r
+       WHERE NOT EXISTS (
+         SELECT 1 FROM sales s WHERE s.reservation_id = r.id AND s.category = 'abono'
+       )
+       AND EXISTS (
+         SELECT 1 FROM sales s WHERE s.reservation_id = r.id AND s.category = 'lodging'
+       )`
+    );
+
+    if (candidates.rowCount === 0) {
+      return res.json({ ok: true, migrated: 0, message: "No hay reservas pendientes de migración" });
+    }
+
+    let migrated = 0;
+    for (const row of candidates.rows) {
+      await query(
+        `INSERT INTO sales (reservation_id, category, amount, payment_method, sale_date, description)
+         VALUES ($1, 'abono', $2, $3, $4, '[MIGRACIÓN] Pago asumido previo al sistema de abonos')`,
+        [row.id, row.total_amount, row.payment_method || "other", row.check_in]
+      );
+      migrated++;
+    }
+
+    return res.json({ ok: true, migrated, message: `${migrated} reserva(s) migrada(s) correctamente` });
   } catch (error) {
     return next(error);
   }

@@ -1,5 +1,5 @@
 const money = new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 });
-const UI_VERSION = "0.9.6";
+const UI_VERSION = "0.9.7";
 
 const paymentLabels = {
   transfer: "Transferencia",
@@ -106,6 +106,9 @@ const state = {
   availabilityDate: new Date().toISOString().slice(0, 10),
   calendarMonth: new Date().toISOString().slice(0, 7),
   calendarView: window.localStorage.getItem("calendar_view") || "panel",
+  calendarWeekStart: null,
+  calendarGuestQuery: window.localStorage.getItem("calendar_guest_query") || "",
+  salesPeriodBy: "check_in",
   totalCabins: Number(localStorage.getItem("total_cabins") || 6),
   expensesFilterMonth: "",
   expensesFilterPayment: "",
@@ -131,7 +134,8 @@ const state = {
   reservationsFilterMaxNights: "",
   reservationsFilterDocType: "",
   documentsFilterType: "",
-  cabins: []
+  cabins: [],
+  calendarReservations: []
 };
 
 function getCabinVisualDefaults(cabin) {
@@ -196,6 +200,20 @@ function normalizeDocumentId(value) {
     .replace(/[.\s-]/g, "")
     .toUpperCase()
     .trim();
+}
+
+function normalizeSearchKey(value) {
+  return String(value || "")
+    .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase();
+}
+
+function addDaysToDateKey(dateKey, deltaDays) {
+  const ts = Date.parse(`${dateKey}T00:00:00Z`);
+  if (!Number.isFinite(ts)) return "";
+  return new Date(ts + deltaDays * 86400000).toISOString().slice(0, 10);
 }
 
 function applyTheme(theme) {
@@ -307,12 +325,18 @@ function closeModal(modal) {
   if (!document.querySelector(".form-modal:not([hidden])")) {
     document.body.classList.remove("modal-open");
   }
-  // Resetear sale-modal si fue abierto como "Cobrar"
+  // Resetear sale-modal si fue abierto como "Abonar"
   if (modal.id === "sale-modal") {
     const title = modal.querySelector(".modal__header h3");
     const debtInfo = document.getElementById("sale-debt-info");
+    const categoryInput = document.querySelector("#sale-form [name='category']");
     if (title) title.textContent = "Registrar venta";
     if (debtInfo) { debtInfo.hidden = true; debtInfo.innerHTML = ""; }
+    if (categoryInput) {
+      categoryInput.disabled = false;
+      categoryInput.style.pointerEvents = "";
+      categoryInput.style.opacity = "";
+    }
   }
 }
 
@@ -348,8 +372,12 @@ function setupSectionModals() {
       }
       if (modalId === "expense-modal") {
         const form = document.getElementById("expense-form");
+        const title = modal?.querySelector(".modal__header h3");
+        if (title) title.textContent = "Registrar gasto";
         if (form) {
           form.reset();
+          const idEl = form.querySelector('[name="id"]');
+          if (idEl) idEl.value = "";
           const monthInput = form.querySelector('[name="expense_month"]');
           if (monthInput) monthInput.value = new Date().toISOString().slice(0, 7);
         }
@@ -537,8 +565,8 @@ function chip(label, className = "") {
   return `<span class="chip ${className}">${label}</span>`;
 }
 
-function deleteButton(type, id) {
-  return `<button type="button" class="btn-delete" data-delete-type="${type}" data-id="${id}">Eliminar</button>`;
+function deleteButton(type, id, label = "Eliminar") {
+  return `<button type="button" class="btn-delete" data-delete-type="${type}" data-id="${id}">${label}</button>`;
 }
 
 function editGuestButton(guest) {
@@ -602,6 +630,7 @@ function periodQs() {
   const params = new URLSearchParams();
   if (state.periodFrom) params.set("from", state.periodFrom);
   if (state.periodTo) params.set("to", state.periodTo);
+  params.set("period_by", "check_in");
   const qs = params.toString();
   return qs ? `?${qs}` : "";
 }
@@ -649,7 +678,7 @@ function filterRows(rows, dateField) {
 }
 
 function saleMatchesPeriod(row, from, to) {
-  const effectiveDate = toDateKey(row?.reservation_check_out || row?.effective_period_date || row?.sale_date);
+  const effectiveDate = toDateKey(row?.effective_period_date || row?.sale_date || row?.reservation_check_out || row?.reservation_check_in);
   if (effectiveDate) {
     if (from && effectiveDate < from) return false;
     if (to && effectiveDate > to) return false;
@@ -756,13 +785,10 @@ function refreshExpenseCategoryInputOptions(rows) {
 function renderExpensesKpis(rows) {
   const total = rows.reduce((acc, row) => acc + Number(row.amount || 0), 0);
   const count = rows.length;
-  const average = count > 0 ? total / count : 0;
   const totalEl = document.getElementById("expenses-kpi-total");
   const countEl = document.getElementById("expenses-kpi-count");
-  const avgEl = document.getElementById("expenses-kpi-average");
   if (totalEl) totalEl.textContent = money.format(total);
   if (countEl) countEl.textContent = String(count);
-  if (avgEl) avgEl.textContent = money.format(average);
 }
 
 function getExpensesPagedRows(rows) {
@@ -802,7 +828,10 @@ function renderExpensesTable(rows) {
       <td>${formatExpenseCategoryLabel(row.category)}</td>
         <td>${paymentLabels[row.payment_method] || row.payment_method}</td>
         <td>${money.format(row.amount)}</td>
-        <td>${deleteButton("expenses", row.id)}</td>
+        <td>
+          <button type="button" class="btn btn--sm btn--ghost btn-edit-expense" data-expense-id="${row.id}">Editar</button>
+          ${deleteButton("expenses", row.id)}
+        </td>
       </tr>`
     )
     .join("");
@@ -860,13 +889,23 @@ function isReservationActiveOnDate(reservation, day) {
   const checkOut = toDateKey(reservation?.check_out);
   if (!targetDay || !checkIn || !checkOut) return false;
   if (reservation.status === "cancelled") return false;
+  // Muestra la reserva desde check_in hasta check_out inclusive (igual que el documento del cliente).
+  if (checkOut <= checkIn) return targetDay === checkIn;
   return checkIn <= targetDay && targetDay <= checkOut;
 }
 
 function renderAvailability(reservations) {
   const cabins = getOperationalCabins(state.cabins).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
   const total = cabins.length;
-  const active = reservations.filter((row) => isReservationActiveOnDate(row, state.availabilityDate));
+  const cabinOrder = new Map(cabins.map((c, idx) => [Number(c.id), idx]));
+  const active = reservations
+    .filter((row) => isReservationActiveOnDate(row, state.availabilityDate))
+    .sort((a, b) => {
+      const ia = cabinOrder.has(Number(a.cabin_id)) ? cabinOrder.get(Number(a.cabin_id)) : 9999;
+      const ib = cabinOrder.has(Number(b.cabin_id)) ? cabinOrder.get(Number(b.cabin_id)) : 9999;
+      if (ia !== ib) return ia - ib;
+      return dateWeight(a.check_in) - dateWeight(b.check_in) || (a.id || 0) - (b.id || 0);
+    });
   const occupiedCabinIds = new Set(active.map((r) => r.cabin_id).filter((id) => Number.isInteger(id)));
   const occupied = Math.min(occupiedCabinIds.size || active.length, total);
   const free = Math.max(total - occupied, 0);
@@ -911,9 +950,16 @@ function renderAvailability(reservations) {
       const rows = active
         .map((row) => {
           const cabin = cabins.find((c) => c.id === row.cabin_id) || null;
+          const selectedDate = state.availabilityDate;
+          const checkIn = toDateKey(row.check_in);
+          const checkOut = toDateKey(row.check_out);
+          const isCheckIn = Boolean(selectedDate && checkIn && selectedDate === checkIn);
+          const isLastNight = Boolean(selectedDate && checkOut && selectedDate === checkOut);
           return `<li class="record-item">
             <div class="record-main">
               <span class="record-title">
+                ${isCheckIn ? `<span class="calendar-flag is-in" title="Check-in hoy">IN</span>` : ""}
+                ${isLastNight ? `<span class="calendar-flag is-out" title="Check-out">OUT</span>` : ""}
                 ${cabin ? cabinBadge(cabin) : ""}
                 <span class="record-title__guest">${row.guest_name}</span>
               </span>
@@ -960,7 +1006,7 @@ function renderOccupancyTimeline(reservations) {
       const activeOnDay = reservations.filter(r => 
         r.cabin_id === cabin.id && 
         r.status !== "cancelled" &&
-        toDateKey(r.check_in) <= dateKey && 
+        toDateKey(r.check_in) <= dateKey &&
         dateKey <= toDateKey(r.check_out)
       );
 
@@ -1014,7 +1060,9 @@ function getOccupancyForDate(reservations, dateKey, totalCabins, allowedCabinIds
     if (r.status === "cancelled") return false;
     const checkIn = toDateKey(r.check_in);
     const checkOut = toDateKey(r.check_out);
-    return checkIn && checkOut && checkIn <= dateKey && dateKey <= checkOut;
+    if (!checkIn || !checkOut) return false;
+    if (checkOut <= checkIn) return checkIn === dateKey;
+    return checkIn <= dateKey && dateKey <= checkOut;
   });
   const scoped = allowedCabinIds
     ? active.filter((r) => Number.isInteger(r.cabin_id) && allowedCabinIds.has(r.cabin_id))
@@ -1030,7 +1078,9 @@ function getActiveReservationsForDate(reservations, dateKey) {
     if (r.status === "cancelled") return false;
     const checkIn = toDateKey(r.check_in);
     const checkOut = toDateKey(r.check_out);
-    return checkIn && checkOut && checkIn <= dateKey && dateKey <= checkOut;
+    if (!checkIn || !checkOut) return false;
+    if (checkOut <= checkIn) return checkIn === dateKey;
+    return checkIn <= dateKey && dateKey <= checkOut;
   });
 }
 
@@ -1039,6 +1089,192 @@ function getCabinColor(cabin) {
   const defaults = getCabinVisualDefaults(cabin);
   return cabin.color_hex || defaults.color;
 }
+
+// ── Week calendar helpers ─────────────────────────────────────
+
+const RESERVATION_COLORS = [
+  "#3b82f6", "#10b981", "#f59e0b", "#ef4444",
+  "#8b5cf6", "#06b6d4", "#f97316", "#ec4899",
+  "#14b8a6", "#6366f1"
+];
+
+function getReservationColor(id) {
+  return RESERVATION_COLORS[Math.abs(Number(id) || 0) % RESERVATION_COLORS.length];
+}
+
+function getWeekStart(dateStr) {
+  const d = new Date(String(dateStr || new Date().toISOString()).slice(0, 10) + "T12:00:00");
+  const dow = d.getDay(); // 0=Sun
+  d.setDate(d.getDate() + (dow === 0 ? -6 : 1 - dow));
+  return d.toISOString().slice(0, 10);
+}
+
+function addDays(dateStr, n) {
+  const d = new Date(String(dateStr).slice(0, 10) + "T12:00:00");
+  d.setDate(d.getDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+function updateWeekCalendarTitle() {
+  const titleEl = document.getElementById("calendar-title");
+  if (!titleEl) return;
+  const ws = state.calendarWeekStart || getWeekStart(new Date().toISOString().slice(0, 10));
+  const we = addDays(ws, 6);
+  const d1 = Number(ws.slice(8));
+  const d2 = Number(we.slice(8));
+  const m1 = Number(ws.slice(5, 7)) - 1;
+  const m2 = Number(we.slice(5, 7)) - 1;
+  const yr = Number(we.slice(0, 4));
+  const MS = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
+  titleEl.textContent = m1 === m2
+    ? `${d1}–${d2} ${MS[m1]} ${yr}`
+    : `${d1} ${MS[m1]} – ${d2} ${MS[m2]} ${yr}`;
+}
+
+function renderWeekCell(cabin, dateKey, reservations, today) {
+  const isToday = dateKey === today;
+  const blocks = [];
+
+  for (const r of reservations) {
+    if (Number(r.cabin_id) !== Number(cabin.id)) continue;
+    const ci = toDateKey(r.check_in);
+    const co = toDateKey(r.check_out);
+    if (!ci || !co) continue;
+
+    if (ci === dateKey) blocks.push({ type: "in", sort: 0, r });
+    if (co === dateKey && ci !== co) blocks.push({ type: "out", sort: 2, r });
+    if (ci < dateKey && co > dateKey) blocks.push({ type: "stay", sort: 1, r });
+  }
+
+  // Order: IN → STAY → OUT
+  blocks.sort((a, b) => a.sort - b.sort || a.r.id - b.r.id);
+
+  let blocksHtml = "";
+  for (const blk of blocks) {
+    const color = getCabinColor(cabin);
+    const guest = blk.r.guest_name || "Huésped";
+    const firstName = guest.split(" ")[0];
+    const rid = blk.r.id;
+    const tip = `${guest} | ${toDateKey(blk.r.check_in)} → ${toDateKey(blk.r.check_out)}`;
+    if (blk.type === "in") {
+      blocksHtml += `<div class="week-block week-block--in" style="--block-color:${color}" data-reservation-id="${rid}" title="${tip}">
+        <span class="week-block__flag">IN</span><span class="week-block__guest">${firstName}</span></div>`;
+    } else if (blk.type === "stay") {
+      blocksHtml += `<div class="week-block week-block--stay" style="--block-color:${color}" data-reservation-id="${rid}" title="${tip}">
+        <span class="week-block__guest">${firstName}</span></div>`;
+    } else {
+      blocksHtml += `<div class="week-block week-block--out" style="--block-color:${color}" data-reservation-id="${rid}" title="${tip}">
+        <span class="week-block__flag">OUT</span><span class="week-block__guest">${firstName}</span></div>`;
+    }
+  }
+
+  return `<div class="week-cal__cell${isToday ? " is-today" : ""}" data-cabin-id="${cabin.id}" data-date="${dateKey}">
+    <button class="week-cal__add-btn" tabindex="-1" title="Nueva reserva — ${cabin.name}">+</button>
+    ${blocksHtml}
+  </div>`;
+}
+
+function renderCalendarWeek(reservations) {
+  const container = document.getElementById("calendar-week");
+  if (!container) return;
+
+  if (!state.calendarWeekStart) {
+    state.calendarWeekStart = getWeekStart(state.availabilityDate || new Date().toISOString().slice(0, 10));
+  }
+
+  const ws = state.calendarWeekStart;
+  const today = new Date().toISOString().slice(0, 10);
+  const DAYS = ["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"];
+  const MS = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
+
+  const days = Array.from({ length: 7 }, (_, i) => addDays(ws, i));
+  const weekEnd = days[6];
+
+  const cabins = getCalendarCabins(state.cabins);
+
+  const weekRes = (reservations || []).filter(r => {
+    if (r.status === "cancelled") return false;
+    const ci = toDateKey(r.check_in);
+    const co = toDateKey(r.check_out);
+    return ci && co && ci <= weekEnd && co >= ws;
+  });
+
+  let html = `<div class="week-cal">`;
+
+  // Header
+  html += `<div class="week-cal__header"><div class="week-cal__corner">Cabaña</div>`;
+  for (let i = 0; i < 7; i++) {
+    const dk = days[i];
+    const dayNum = Number(dk.slice(8));
+    const monthIdx = Number(dk.slice(5, 7)) - 1;
+    const showMonth = i === 0 || dayNum === 1;
+    const isT = dk === today;
+    html += `<div class="week-cal__day-head${isT ? " is-today" : ""}" data-date="${dk}">
+      <span class="week-cal__day-name">${DAYS[i]}</span>
+      <span class="week-cal__day-num">${dayNum}</span>
+      ${showMonth ? `<span class="week-cal__day-month">${MS[monthIdx]}</span>` : ""}
+    </div>`;
+  }
+  html += `</div>`;
+
+  // Body — one row per cabin
+  html += `<div class="week-cal__body">`;
+  for (const cabin of cabins) {
+    const cabinColor = getCabinColor(cabin);
+    html += `<div class="week-cal__row">
+      <div class="week-cal__cabin-label" title="${cabin.name}">
+        <span class="week-cal__cabin-dot" style="background:${cabinColor};"></span>
+        <span class="week-cal__cabin-name">${cabin.name}</span>
+      </div>`;
+    for (const dk of days) {
+      html += renderWeekCell(cabin, dk, weekRes, today);
+    }
+    html += `</div>`;
+  }
+  html += `</div></div>`;
+
+  container.innerHTML = html;
+
+  // Events: "+" buttons
+  container.querySelectorAll(".week-cal__add-btn").forEach(btn => {
+    btn.addEventListener("click", e => {
+      e.stopPropagation();
+      const cell = btn.closest(".week-cal__cell");
+      if (cell) openReservationWithContext(cell.dataset.cabinId, cell.dataset.date);
+    });
+  });
+
+  // Events: click block → edit reservation
+  container.querySelectorAll(".week-block[data-reservation-id]").forEach(blk => {
+    blk.addEventListener("click", e => {
+      e.stopPropagation();
+      const rid = Number(blk.dataset.reservationId);
+      if (rid > 0 && typeof openReservationEditor === "function") openReservationEditor(rid);
+    });
+  });
+}
+
+window.openReservationWithContext = function openReservationWithContext(cabinId, dateStr) {
+  resetReservationForm();
+  const modal = document.getElementById("reservation-modal");
+  const form = document.getElementById("reservation-form");
+  if (!modal || !form) return;
+
+  const cabinSelect = document.getElementById("reservation-cabin");
+  if (cabinSelect) cabinSelect.value = String(cabinId);
+
+  const checkInInput = form.querySelector('input[name="check_in"]');
+  if (checkInInput) checkInInput.value = String(dateStr || "");
+
+  setTimeout(() => {
+    if (cabinSelect) cabinSelect.dispatchEvent(new Event("change"));
+    if (checkInInput) checkInInput.dispatchEvent(new Event("change"));
+  }, 0);
+
+  openModal(modal);
+};
+
+// ─────────────────────────────────────────────────────────────
 
 function getCalendarCabinPalette(cabin, idx = 0) {
   const rawName = String(cabin?.name || "").trim();
@@ -1063,18 +1299,99 @@ function getCalendarCabinPalette(cabin, idx = 0) {
   return idx === 0 ? paletteByKey["1"] : idx === 1 ? paletteByKey["2"] : idx === 2 ? paletteByKey["3"] : paletteByKey.casa;
 }
 
-function getDayGuestLines(activeReservations, cabins) {
-  const cabinById = new Map((cabins || []).map((c) => [Number(c.id), c]));
-  return activeReservations
-    .filter((row) => String(row.guest_name || "").trim())
-    .map((row) => {
-      const name = String(row.guest_name || "").trim().toUpperCase();
-      const guests = Number(row.guests_count) || 1;
-      const cabin = cabinById.get(Number(row.cabin_id));
-      const cabinIndex = (cabins || []).findIndex((item) => Number(item.id) === Number(row.cabin_id));
-      const palette = getCalendarCabinPalette(cabin, cabinIndex);
-      return { label: `${name} X${guests}`, color: palette.border, status: row.status, palette };
-    });
+function getDayGuestLines(activeReservations, cabins, dateKey) {
+  const cabinList = Array.isArray(cabins) ? cabins : [];
+  const cabinById = new Map(cabinList.map((c) => [Number(c.id), c]));
+  const targetKey = toDateKey(dateKey);
+
+  // Mapear reserva activa por cabaña (si por error llegan múltiples, dejamos la "mejor").
+  const byCabinId = new Map();
+  const turnoverByCabinId = new Map(); // cabinId → { out, in } en día de rotación
+  for (const row of activeReservations || []) {
+    const cabinId = Number(row?.cabin_id);
+    if (!Number.isInteger(cabinId)) continue;
+    if (!cabinById.has(cabinId)) continue;
+    const guestName = String(row?.guest_name || "").trim();
+    if (!guestName) continue;
+
+    const prev = byCabinId.get(cabinId);
+    if (!prev) {
+      byCabinId.set(cabinId, row);
+      continue;
+    }
+
+    const prevConfirmed = prev.status === "confirmed";
+    const nextConfirmed = row.status === "confirmed";
+    if (prevConfirmed !== nextConfirmed) {
+      if (nextConfirmed) byCabinId.set(cabinId, row);
+      continue;
+    }
+
+    // Si ya hay registros, los acumulamos en una lista de "turnovers" para mostrar más de 2 si es necesario
+    if (!turnoverByCabinId.has(cabinId)) {
+      turnoverByCabinId.set(cabinId, [prev, row]);
+    } else {
+      turnoverByCabinId.get(cabinId).push(row);
+    }
+    // Mantener en byCabinId el que tenga el check_in más reciente o mayor ID para consistencia
+    if (toDateKey(row.check_in) > toDateKey(prev.check_in)) {
+      byCabinId.set(cabinId, row);
+    }
+    continue;
+  }
+
+  // IMPORTANTE: mantener la misma cantidad y orden de filas por día para que "se alineen"
+  // los nombres entre días (una fila por cabaña, con placeholders vacíos).
+  return cabinList.map((cabin, idx) => {
+    const cabinId = Number(cabin.id);
+    const row = byCabinId.get(cabinId) || null;
+    const palette = getCalendarCabinPalette(cabin, idx);
+    if (!row) return { label: "", status: "", palette, cabinIndex: idx, isEmpty: true };
+
+    // Día de rotación o solapamiento: devolver múltiples huéspedes si existen.
+    const turnovers = turnoverByCabinId.get(cabinId) || null;
+    if (turnovers && turnovers.length >= 2) {
+      // Ordenar por check_in para mostrar salida primero
+      const sorted = [...turnovers].sort((a, b) => dateWeight(a.check_in) - dateWeight(b.check_in) || (a.id || 0) - (b.id || 0));
+      const subRows = sorted.map(r => {
+        const name = String(r.guest_name || "").trim().toUpperCase();
+        const guests = Number(r.guests_count) || 1;
+        return {
+          label: `${name} X${guests}`,
+          isCheckIn: toDateKey(r.check_in) === targetKey,
+          isLastNight: toDateKey(r.check_out) === targetKey
+        };
+      });
+
+      return {
+        isTurnover: true,
+        subRows,
+        guestKey: normalizeSearchKey(turnovers.map(r => r.guest_name).join(" ")),
+        status: row.status, // Usamos el status de la última reserva activa para el color
+        palette,
+        cabinIndex: idx,
+        isEmpty: false
+      };
+    }
+
+    const rawName = String(row.guest_name || "").trim();
+    const name = rawName.toUpperCase();
+    const guests = Number(row.guests_count) || 1;
+    const checkIn = toDateKey(row.check_in);
+    const checkOut = toDateKey(row.check_out);
+    const isCheckIn = Boolean(targetKey && checkIn && targetKey === checkIn);
+    const isLastNight = Boolean(targetKey && checkOut && targetKey === checkOut);
+    return {
+      label: `${name} X${guests}`,
+      guestKey: normalizeSearchKey(rawName),
+      status: row.status,
+      palette,
+      cabinIndex: idx,
+      isCheckIn,
+      isLastNight,
+      isEmpty: false
+    };
+  });
 }
 
 function renderDayCabinChips(cabins, activeReservations) {
@@ -1096,19 +1413,55 @@ function renderCalendarDay(dateKey, dayLabel, dayClasses, reservations, cabins, 
     .filter((r) => Number.isInteger(r.cabin_id) && allowedCabinIds.has(r.cabin_id));
   const occ = getOccupancyForDate(reservations, dateKey, totalCabins, allowedCabinIds);
   const occClass = occ.pct >= 100 ? "is-full" : occ.pct > 0 ? "is-partial" : "is-free";
-  const guests = getDayGuestLines(active, cabins);
+  const guests = getDayGuestLines(active, cabins, dateKey);
   const isPdf = state.calendarView === "pdf";
+  const query = normalizeSearchKey(state.calendarGuestQuery);
   const guestHtml = guests.length
     ? guests
-        .map(
-          (line) => {
-            const confirmedClass = isPdf && line.status === "confirmed" ? " is-confirmed" : "";
+        .map((line) => {
+          if (!line || (!line.label && !line.isTurnover)) return `<span class="calendar-guest-row is-empty"></span>`;
+          const isFiltering = Boolean(query);
+          const isMatch = !isFiltering || (line.guestKey && line.guestKey.includes(query));
+          const classes = ["calendar-guest-row"];
+          if (isPdf && line.status === "confirmed") classes.push("is-confirmed");
+          if (isFiltering && !isMatch) classes.push("is-dim");
+          if (isFiltering && isMatch) classes.push("is-match");
+
+          // Día de rotación o múltiples huéspedes: sub-filas dinámicas.
+          if (line.isTurnover) {
+            classes.push("is-turnover");
+            const rowsHtml = (line.subRows || []).map(sub => {
+              const flags = [];
+              if (sub.isCheckIn) flags.push(`<span class="calendar-flag is-in">IN</span>`);
+              if (sub.isLastNight) flags.push(`<span class="calendar-flag is-out">OUT</span>`);
+              return `<span class="calendar-turnover-row">${flags.join("")}<span class="calendar-guest-row__text">${sub.label}</span></span>`;
+            }).join("");
+
             if (isPdf) {
-              return `<span class="calendar-guest-row${confirmedClass}" style="background:${line.palette.bg};color:${line.palette.text};border-left:4px solid ${line.palette.border}">${line.label}</span>`;
+              const pdfColor = line.status === "confirmed" ? "#b91c1c" : line.palette.text;
+              return `<span class="${classes.join(" ")}" style="background:${line.palette.bg};color:${pdfColor};border-left:4px solid ${line.palette.border}">
+                ${rowsHtml}
+              </span>`;
             }
-            return `<span class="calendar-guest-row" style="border-left-color:${line.palette.border};background:${line.palette.soft}">${line.label}</span>`;
+            return `<span class="${classes.join(" ")}" style="background:${line.palette.bg};color:${line.palette.text}">
+              ${rowsHtml}
+            </span>`;
           }
-        )
+
+          const flags = [];
+          if (line.isCheckIn) flags.push(`<span class="calendar-flag is-in" title="Check-in">IN</span>`);
+          if (line.isLastNight) flags.push(`<span class="calendar-flag is-out" title="Check-out">OUT</span>`);
+
+          if (isPdf) {
+            const pdfColor = line.status === "confirmed" ? "#b91c1c" : line.palette.text;
+            return `<span class="${classes.join(" ")}" style="background:${line.palette.bg};color:${pdfColor};border-left:4px solid ${line.palette.border}">
+              ${flags.join("")}<span class="calendar-guest-row__text">${line.label}</span>
+            </span>`;
+          }
+          return `<span class="${classes.join(" ")}" style="background:${line.palette.bg};color:${line.palette.text}">
+            ${flags.join("")}<span class="calendar-guest-row__text">${line.label}</span>
+          </span>`;
+        })
         .join("")
     : `<span class="calendar-guest-row is-empty"></span>`;
   return `<button type="button" class="calendar-day ${dayClasses} ${occClass}" data-date="${dateKey}">
@@ -1125,14 +1478,240 @@ function getCalendarCabins(cabins) {
   return getOperationalCabins(cabins || []).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
 }
 
+function getMonthRange(yy, mm) {
+  const firstDay = new Date(Date.UTC(yy, mm - 1, 1));
+  const lastDay = new Date(Date.UTC(yy, mm, 0));
+  const startKey = firstDay.toISOString().slice(0, 10);
+  const endKey = lastDay.toISOString().slice(0, 10);
+  const daysInMonth = lastDay.getUTCDate();
+  return { startKey, endKey, daysInMonth };
+}
+
+function clampReservationToRange(reservation, rangeStartKey, rangeEndKey) {
+  const start = toDateKey(reservation.check_in);
+  const endExclusive = toDateKey(reservation.check_out);
+  if (!start || !endExclusive) return null;
+  // El bloque cubre check_in hasta check_out inclusive (igual que el documento del cliente).
+  const end = endExclusive <= start ? start : endExclusive;
+  // Intersección (rangos inclusivos)
+  const clampedStart = start < rangeStartKey ? rangeStartKey : start;
+  const clampedEnd = end > rangeEndKey ? rangeEndKey : end;
+  if (clampedEnd < rangeStartKey || clampedStart > rangeEndKey) return null;
+  if (clampedEnd < clampedStart) return null;
+  return { start: clampedStart, end: clampedEnd };
+}
+
+function dateKeyDiffDays(fromKey, toKey) {
+  const fromTs = Date.parse(`${fromKey}T00:00:00Z`);
+  const toTs = Date.parse(`${toKey}T00:00:00Z`);
+  if (!Number.isFinite(fromTs) || !Number.isFinite(toTs)) return 0;
+  return Math.round((toTs - fromTs) / 86400000);
+}
+
+function packTimelineRows(items) {
+  // items: [{ startIdx, endIdx, ... }], rangos inclusivos
+  const rows = []; // lastEndIdx por fila
+  const placed = [];
+  const sorted = [...items].sort((a, b) => a.startIdx - b.startIdx || a.endIdx - b.endIdx || (a.id || 0) - (b.id || 0));
+
+  for (const item of sorted) {
+    let rowIndex = -1;
+    for (let i = 0; i < rows.length; i++) {
+      if (rows[i] <= item.startIdx) {
+        rowIndex = i;
+        break;
+      }
+    }
+    if (rowIndex === -1) {
+      rowIndex = rows.length;
+      rows.push(item.endIdx);
+    } else {
+      rows[rowIndex] = item.endIdx;
+    }
+    placed.push({ ...item, rowIndex });
+  }
+
+  return { rowsCount: Math.max(1, rows.length), placed };
+}
+
+function renderCalendarTimeline(reservations) {
+  const mount = document.getElementById("calendar-timeline");
+  if (!mount) return;
+
+  const guestQuery = normalizeSearchKey(state.calendarGuestQuery);
+  const [yy, mm] = (state.calendarMonth || new Date().toISOString().slice(0, 7)).split("-").map(Number);
+  const { startKey, endKey, daysInMonth } = getMonthRange(yy, mm);
+  const dayW = 28;
+  const rowH = 26;
+  const totalDays = daysInMonth;
+  const totalWidth = totalDays * dayW;
+
+  const cabins = getCalendarCabins(state.cabins);
+  const cabinById = new Map(cabins.map((c) => [Number(c.id), c]));
+
+  const scoped = (reservations || []).filter((r) => {
+    if (!r) return false;
+    if (r.status === "cancelled") return false;
+    const hit = clampReservationToRange(r, startKey, endKey);
+    return Boolean(hit);
+  });
+
+  const nullCabinReservations = scoped.filter((r) => !Number.isInteger(r.cabin_id));
+  const lanes = [
+    ...cabins.map((c) => ({ id: Number(c.id), name: c.name || `Cabaña #${c.id}`, cabin: c })),
+    ...(nullCabinReservations.length > 0 ? [{ id: null, name: "Sin cabaña", cabin: null }] : [])
+  ];
+
+  const headerDaysHtml = Array.from({ length: daysInMonth }, (_, i) => {
+    const d = i + 1;
+    return `<div class="cal-tl__day">${d}</div>`;
+  }).join("");
+
+  const laneHtml = lanes
+    .map((lane) => {
+      const laneId = lane.id;
+      const laneReservations = scoped.filter((r) => (laneId == null ? !Number.isInteger(r.cabin_id) : Number(r.cabin_id) === laneId));
+
+      const items = laneReservations
+        .map((r) => {
+          const hit = clampReservationToRange(r, startKey, endKey);
+          if (!hit) return null;
+          const startIdx = dateKeyDiffDays(startKey, hit.start);
+          const nights = dateKeyDiffDays(r.check_in, r.check_out);
+          const endIdxForPacking = startIdx + Math.max(1, nights);
+          if (endIdxForPacking < 0 || startIdx > daysInMonth - 1) return null;
+          return { ...r, startIdx, endIdx: endIdxForPacking };
+        })
+        .filter(Boolean);
+
+      const { rowsCount, placed } = packTimelineRows(items);
+      const heightPx = rowsCount * rowH;
+
+      const meta = lane.cabin
+        ? `${lane.cabin.size_category === "large" ? "Casa · " : "Refugio · "}${getCabinCapacity(lane.cabin)} pax`
+        : "Reservas sin cabaña asignada";
+
+      const bars = placed
+        .map((r) => {
+          const left = r.startIdx * dayW;
+          const nights = dateKeyDiffDays(r.check_in, r.check_out);
+          const width = Math.max(dayW, nights * dayW);
+          const top = r.rowIndex * rowH + 3;
+          const guest = String(r.guest_name || "").trim() || "Sin nombre";
+          const pax = Number(r.guests_count) || 1;
+          const label = `${guest.toUpperCase()} X${pax}`;
+
+          const cabin = lane.cabin || cabinById.get(Number(r.cabin_id));
+          const cabinIndex = cabins.findIndex((c) => Number(c.id) === Number(r.cabin_id));
+          const palette = cabin ? getCalendarCabinPalette(cabin, cabinIndex) : null;
+          const bg = palette?.soft || "rgba(148, 163, 184, 0.14)";
+          const border = palette?.border || "rgba(148, 163, 184, 0.22)";
+          const text = palette?.text || "rgba(226, 232, 240, 0.9)";
+
+          const classes = ["cal-tl__res"];
+          if (!Number.isInteger(r.cabin_id)) classes.push("is-muted");
+          if (r.status === "cancelled") classes.push("is-cancelled");
+          if (guestQuery && !normalizeSearchKey(guest).includes(guestQuery)) classes.push("is-filtered");
+
+          const title = `#${r.id} · ${formatDate(r.check_in)} → ${formatDate(r.check_out)}`;
+          return `<div class="${classes.join(" ")}" data-res-id="${r.id}"
+            style="left:${left}px;top:${top}px;width:${width}px;background:${bg};border-color:${border};color:${text}"
+            title="${title}">${label}</div>`;
+        })
+        .join("");
+
+      return `
+        <div class="cal-tl__lane-label">
+          <span>${lane.name}</span>
+          <span class="cal-tl__lane-meta">${meta}</span>
+        </div>
+        <div class="cal-tl__lane-track">
+          <div class="cal-tl__lane-inner" style="width:${totalWidth}px;min-height:${heightPx}px">
+            ${bars}
+          </div>
+        </div>
+      `;
+    })
+    .join("");
+
+  mount.innerHTML = `
+    <div class="cal-tl">
+      <div class="cal-tl__spacer">Reservas · ${MONTH_NAMES[mm - 1]} ${yy}</div>
+      <div class="cal-tl__days"><div class="cal-tl__day-row" style="width:${totalWidth}px">${headerDaysHtml}</div></div>
+      <div class="cal-tl__lanes">${laneHtml}</div>
+    </div>
+  `;
+
+  // Scroll sync (header + lanes)
+  const daysScroller = mount.querySelector(".cal-tl__days");
+  const laneScrollers = [...mount.querySelectorAll(".cal-tl__lane-track")];
+  if (daysScroller && laneScrollers.length > 0) {
+    let syncing = false;
+    const syncTo = (left) => {
+      if (syncing) return;
+      syncing = true;
+      daysScroller.scrollLeft = left;
+      laneScrollers.forEach((el) => {
+        el.scrollLeft = left;
+      });
+      syncing = false;
+    };
+    daysScroller.addEventListener("scroll", () => syncTo(daysScroller.scrollLeft));
+    laneScrollers.forEach((el) => el.addEventListener("scroll", () => syncTo(el.scrollLeft)));
+  }
+
+  // Click abre editor (si existe)
+  mount.querySelectorAll(".cal-tl__res[data-res-id]").forEach((el) => {
+    el.addEventListener("click", () => {
+      const id = Number(el.dataset.resId);
+      if (!Number.isInteger(id) || id <= 0) return;
+      if (typeof openReservationEditor === "function") {
+        openReservationEditor(id);
+        return;
+      }
+      const any = scoped.find((r) => Number(r.id) === id);
+      if (any?.check_in) {
+        state.availabilityDate = toDateKey(any.check_in);
+        const dateInput = document.getElementById("availability-date");
+        if (dateInput) dateInput.value = state.availabilityDate;
+        loadAll();
+      }
+    });
+  });
+}
+
 function renderCalendar(reservations) {
   const container = document.getElementById("calendar-days");
+  const timeline = document.getElementById("calendar-timeline");
+  const weekEl = document.getElementById("calendar-week");
   const titleEl = document.getElementById("calendar-title");
   const gridEl = document.getElementById("calendar-grid");
-  if (!container || !titleEl) return;
+  if (!titleEl) return;
+
+  const isWeek = state.calendarView === "week";
+  const isTimeline = state.calendarView === "timeline";
+
+  if (gridEl) gridEl.hidden = isTimeline || isWeek;
+  if (timeline) timeline.hidden = !isTimeline;
+  if (weekEl) weekEl.hidden = !isWeek;
+
+  if (isWeek) {
+    updateWeekCalendarTitle();
+    renderCalendarWeek(reservations);
+    return;
+  }
+  if (isTimeline) {
+    renderCalendarTimeline(reservations);
+    return;
+  }
+  if (!container) return;
 
   const cabins = getCalendarCabins(state.cabins);
   const totalCabins = Math.max(1, cabins.length);
+  if (gridEl) {
+    gridEl.style.setProperty("--calendar-total-cabins", String(totalCabins));
+    gridEl.style.setProperty("--calendar-chip-cols", String(Math.min(4, totalCabins)));
+  }
 
   const [yy, mm] = (state.calendarMonth || new Date().toISOString().slice(0, 7)).split("-").map(Number);
   const firstDay = new Date(yy, mm - 1, 1);
@@ -1144,6 +1723,7 @@ function renderCalendar(reservations) {
 
   if (gridEl) {
     gridEl.classList.toggle("is-pdf", state.calendarView === "pdf");
+    gridEl.classList.toggle("is-filtering", Boolean(normalizeSearchKey(state.calendarGuestQuery)));
     const weekdaySpans = gridEl.querySelectorAll(".calendar-weekdays span");
     const labels = state.calendarView === "pdf"
       ? ["LU", "MAR", "MIÉ", "JUE", "VIE", "SÁB", "DOM"]
@@ -1183,34 +1763,89 @@ function setupCalendarControls() {
   const nextBtn = document.getElementById("calendar-next");
   const dateInput = document.getElementById("availability-date");
   const viewBtn = document.getElementById("calendar-view-toggle");
+  const guestSearch = document.getElementById("calendar-guest-search");
 
   if (prevBtn) {
     prevBtn.addEventListener("click", () => {
-      const [yy, mm] = state.calendarMonth.split("-").map(Number);
-      const d = new Date(yy, mm - 2, 1);
-      state.calendarMonth = d.toISOString().slice(0, 7);
-      loadAll();
+      if (state.calendarView === "week") {
+        state.calendarWeekStart = addDays(
+          state.calendarWeekStart || getWeekStart(new Date().toISOString().slice(0, 10)), -7
+        );
+        updateWeekCalendarTitle();
+        renderCalendarWeek(state.calendarReservations || []);
+      } else {
+        const [yy, mm] = state.calendarMonth.split("-").map(Number);
+        const d = new Date(yy, mm - 2, 1);
+        state.calendarMonth = d.toISOString().slice(0, 7);
+        loadAll();
+      }
     });
   }
   if (nextBtn) {
     nextBtn.addEventListener("click", () => {
-      const [yy, mm] = state.calendarMonth.split("-").map(Number);
-      const d = new Date(yy, mm, 1);
-      state.calendarMonth = d.toISOString().slice(0, 7);
-      loadAll();
+      if (state.calendarView === "week") {
+        state.calendarWeekStart = addDays(
+          state.calendarWeekStart || getWeekStart(new Date().toISOString().slice(0, 10)), 7
+        );
+        updateWeekCalendarTitle();
+        renderCalendarWeek(state.calendarReservations || []);
+      } else {
+        const [yy, mm] = state.calendarMonth.split("-").map(Number);
+        const d = new Date(yy, mm, 1);
+        state.calendarMonth = d.toISOString().slice(0, 7);
+        loadAll();
+      }
     });
   }
 
   if (viewBtn) {
-    const applyLabel = () => {
-      viewBtn.textContent = state.calendarView === "pdf" ? "Vista panel" : "Vista PDF";
+    const applyViewLabels = () => {
+      const isPrimary = state.calendarView === "week" || state.calendarView === "panel";
+      viewBtn.textContent = state.calendarView === "week" ? "Vista mensual" : "Vista semana";
+      viewBtn.style.fontWeight = isPrimary ? "" : "normal";
+      const pdfBtn2 = document.getElementById("calendar-pdf-toggle");
+      if (pdfBtn2) {
+        pdfBtn2.textContent = state.calendarView === "timeline" ? "Vista PDF" : state.calendarView === "pdf" ? "← Panel" : "PDF";
+        pdfBtn2.style.opacity = (state.calendarView === "timeline" || state.calendarView === "pdf") ? "1" : "0.55";
+      }
     };
-    applyLabel();
+    applyViewLabels();
     viewBtn.addEventListener("click", () => {
-      state.calendarView = state.calendarView === "pdf" ? "panel" : "pdf";
+      // Primary toggle: panel ↔ week
+      if (state.calendarView === "week" || state.calendarView === "panel") {
+        state.calendarView = state.calendarView === "week" ? "panel" : "week";
+      } else {
+        // From timeline/pdf, go back to panel
+        state.calendarView = "panel";
+      }
       window.localStorage.setItem("calendar_view", state.calendarView);
-      applyLabel();
-      loadAll();
+      applyViewLabels();
+      renderCalendar(state.calendarReservations || []);
+    });
+
+    const pdfBtn = document.getElementById("calendar-pdf-toggle");
+    if (pdfBtn) {
+      pdfBtn.addEventListener("click", () => {
+        if (state.calendarView === "timeline") {
+          state.calendarView = "pdf";
+        } else if (state.calendarView === "pdf") {
+          state.calendarView = "panel";
+        } else {
+          state.calendarView = "timeline";
+        }
+        window.localStorage.setItem("calendar_view", state.calendarView);
+        applyViewLabels();
+        renderCalendar(state.calendarReservations || []);
+      });
+    }
+  }
+
+  if (guestSearch) {
+    guestSearch.value = state.calendarGuestQuery || "";
+    guestSearch.addEventListener("input", () => {
+      state.calendarGuestQuery = guestSearch.value || "";
+      window.localStorage.setItem("calendar_guest_query", state.calendarGuestQuery);
+      renderCalendar(state.calendarReservations || []);
     });
   }
 
@@ -1535,6 +2170,7 @@ async function loadAll() {
   state.expenses = expenses;
   state.expensesMeta = expensesMeta || { categories: [], category_options: [], category_labels: {} };
   state.reservations = reservations;
+  state.calendarReservations = wideReservations;
 
   const filteredReservations = reservations;
   const filteredSales = (state.periodFrom || state.periodTo)
@@ -1603,17 +2239,34 @@ async function loadAll() {
         <span class="record-id">#${row.id}</span>
       </div>
       <div class="record-meta">
+        ${row.status && row.status !== "confirmed" ? chip(`Estado ${row.status}`, row.status === "cancelled" ? "badge--ghost" : "badge--info") : ""}
+        ${row.cabin_id ? chip(`🏠 ${row.cabin_name || "Cabaña #" + row.cabin_id}`) : chip("Sin cabaña", "badge--ghost")}
         ${chip(`Canal/Pago ${formatChannelPaymentLabel(row.source, row.payment_method)}`)}
         ${chip(`Llega ${formatDate(row.check_in)}${row.check_in_time ? " " + String(row.check_in_time).slice(0, 5) : ""}`)}
         ${chip(`Sale ${formatDate(row.check_out)}${row.checkout_time ? " " + String(row.checkout_time).slice(0, 5) : ""}`)}
         ${row.nights != null ? chip(`${row.nights} noche${Number(row.nights) === 1 ? "" : "s"}`) : ""}
-        ${chip(`Total ${money.format(row.total_amount)}`)}
-        ${chip(`Abonado ${money.format(row.paid_amount || 0)}`)}
-        ${chip(debtLabel(row.debt_status, row.amount_due), debtClass(row.debt_status))}
+        ${Number(row.total_amount) === 0 ? chip("Sin monto — editar", "debt-pending") : chip(`Total ${money.format(row.total_amount)}`)}
+        ${(() => {
+          if (row.source === "airbnb" && Number(row.total_amount) > 0) {
+            const commission = Math.round(row.total_amount * 0.03);
+            const net = row.total_amount - commission;
+            return chip(`Comisión Airbnb -${money.format(commission)} → Neto ${money.format(net)}`, "badge--ghost");
+          }
+          return "";
+        })()}
+        <button type="button" class="chip chip--btn" id="abono-btn-${row.id}" onclick="togglePaymentHistory(${row.id})">
+          Abonado ${money.format(row.paid_amount || 0)} ▾
+        </button>
+        ${Number(row.total_amount) > 0 ? chip(debtLabel(row.debt_status, row.amount_due), debtClass(row.debt_status)) : ""}
       </div>
+      <div id="payment-history-${row.id}" class="payment-history" hidden></div>
       <div class="record-actions">
+        ${row.debt_status !== "paid" ? `<button type="button" class="btn btn--sm btn--primary" onclick="openSaleModalForReservation(${row.id}, ${Number(row.amount_due || 0)}, '${(row.guest_name || "").replace(/'/g, "\\'")}')">Abonar</button>` : ""}
+        ${row.paid_amount == 0 && Number(row.total_amount) > 0 ? `<button type="button" class="btn btn--sm btn--ghost" onclick="migrateReservationPayment(${row.id}, '${(row.guest_name || "").replace(/'/g, "\\'")}')" title="Marcar como pagada (reserva antigua)">Migrar pago</button>` : ""}
+        <button type="button" class="btn btn--sm btn--ghost btn-change-guest" data-reservation-id="${row.id}" title="Cambiar huésped vinculado">Huésped</button>
+        <button type="button" class="btn btn--sm btn--ghost btn-change-cabin" data-reservation-id="${row.id}" title="Cambiar cabaña asignada">Cabaña</button>
         <button type="button" class="btn btn--sm btn--ghost btn-edit-reservation" data-reservation-id="${row.id}">Editar</button>
-        ${deleteButton("reservations", row.id)}
+        ${row.status === "cancelled" ? deleteButton("reservations", row.id, "Eliminar definitivamente") : ""}
       </div>
     </li>`);
 
@@ -1630,6 +2283,7 @@ async function loadAll() {
         <span class="record-id">#${row.id}</span>
       </div>
       <div class="record-meta">
+        ${row.status && row.status !== "issued" ? chip(`Estado ${row.status}`, "badge--ghost") : ""}
         ${chip(`Fecha ${formatDate(row.issue_date)}`)}
         ${chip(`Monto ${money.format(row.amount)}`)}
         ${row.reservation_id ? chip(`Reserva #${row.reservation_id}`) : ""}
@@ -1705,6 +2359,7 @@ function renderCabinsList(cabins) {
         nightlyRate > 0
           ? `<p class="cabin-record__price">Tarifa: ${money.format(nightlyRate)}</p>`
           : `<p class="cabin-record__price cabin-record__price--missing">Tarifa: no configurada</p>`;
+      const canDelete = !(Number.isInteger(cabin.id) && cabin.id >= 1 && cabin.id <= 4);
       return `<li class="record-item cabin-record">
         <div class="cabin-record__thumb">
           ${mainSrc ? `<img src="${mainSrc}" alt="${cabin.name}" />` : `<span class="house-icon">🏡</span>`}
@@ -1718,7 +2373,7 @@ function renderCabinsList(cabins) {
           <button type="button" class="btn btn--sm btn--ghost cabin-btn-edit-form" data-cabin-id="${cabin.id}">Editar Datos</button>
           <button type="button" class="btn btn--sm btn--ghost cabin-btn-gallery" data-cabin="${cabin.id}">Ver Fotos</button>
           <button type="button" class="btn btn--sm btn--ghost cabin-btn-edit" data-cabin="${cabin.id}">Gestionar Fotos</button>
-          ${deleteButton("cabins", cabin.id)}
+          ${canDelete ? deleteButton("cabins", cabin.id) : `<span class="chip badge--ghost" title="Cabañas operativas (1-4) no se eliminan.">Protegida</span>`}
         </div>
       </li>`;
     })
@@ -1906,6 +2561,9 @@ function resetReservationForm() {
     documentInput.required = true;
   }
 
+  const statusRow = form.querySelector("#reservation-status-row");
+  if (statusRow) statusRow.hidden = true;
+
   setReservationGuestStatus("Ingresa RUT para buscar huésped.");
 }
 
@@ -1963,6 +2621,10 @@ function openReservationEditor(reservationId) {
     documentInput.required = !isNoRut;
   }
 
+  setFieldValue('[name="status"]', reservation.status || "confirmed");
+  const statusRow = form.querySelector("#reservation-status-row");
+  if (statusRow) statusRow.hidden = false;
+
   setReservationGuestStatus(`Editando reserva de ${reservation.guest_name || "huésped"} (#${reservation.id}).`, "ok");
   openModal(modal);
 
@@ -1976,9 +2638,14 @@ function bindReservationForm() {
   const form = document.getElementById("reservation-form");
   if (!form) return;
   const nightlyRateInput = form.querySelector('input[name="nightly_rate"]');
+  let isSubmitting = false;
 
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
+    if (isSubmitting) return;
+    isSubmitting = true;
+    const submitBtn = form.querySelector('[type="submit"]');
+    if (submitBtn) submitBtn.disabled = true;
     const payload = normalize(toPayload(form));
     const reservationId = Number(payload.reservation_id || 0);
     const isEditing = Number.isInteger(reservationId) && reservationId > 0;
@@ -1989,27 +2656,39 @@ function bindReservationForm() {
     const rut = isNoRut ? null : normalizeDocumentId(payload.guest_document_id);
     payload.guest_document_id = rut;
 
+    const resetSubmit = () => {
+      isSubmitting = false;
+      if (submitBtn) submitBtn.disabled = false;
+    };
+
     if (!rut && !isNoRut) {
       setStatus("Debes ingresar RUT del huésped", "error");
       setReservationGuestStatus("Debes ingresar RUT válido.", "error");
+      resetSubmit();
       return;
     }
 
     const nightlyRateValue = Number(payload.nightly_rate);
     const hasNightlyRate = Number.isFinite(nightlyRateValue) && nightlyRateValue > 0;
     if (!hasNightlyRate) {
-      const shouldContinueWithoutRate = window.confirm(
-        "Actualmente no hay una tarifa por noche configurada. Desea continuar igualmente?"
-      );
-      if (!shouldContinueWithoutRate) {
-        setStatus("Debes ingresar una tarifa por noche o confirmar continuar con tarifa 0.", "error");
-        if (nightlyRateInput) {
-          nightlyRateInput.focus();
-          nightlyRateInput.select?.();
+      if (isEditing) {
+        // When editing: empty nightly_rate = keep existing DB value (don't overwrite)
+        delete payload.nightly_rate;
+      } else {
+        const shouldContinueWithoutRate = window.confirm(
+          "Actualmente no hay una tarifa por noche configurada. Desea continuar igualmente?"
+        );
+        if (!shouldContinueWithoutRate) {
+          setStatus("Debes ingresar una tarifa por noche o confirmar continuar con tarifa 0.", "error");
+          if (nightlyRateInput) {
+            nightlyRateInput.focus();
+            nightlyRateInput.select?.();
+          }
+          resetSubmit();
+          return;
         }
-        return;
+        payload.nightly_rate = 0;
       }
-      payload.nightly_rate = 0;
     }
 
     setStatus("Guardando...", "");
@@ -2073,6 +2752,10 @@ function bindReservationForm() {
         delete reservationPayload.guest_email;
         delete reservationPayload.guest_phone;
         delete reservationPayload.tax_document_type;
+        delete reservationPayload.initial_payment;
+        // Don't nullify time fields when they're empty — keep the DB value intact
+        if (!reservationPayload.check_in_time) delete reservationPayload.check_in_time;
+        if (!reservationPayload.checkout_time) delete reservationPayload.checkout_time;
         await api(`/api/reservations/${reservationId}`, { method: "PATCH", body: JSON.stringify(reservationPayload) });
       } else {
         await api("/api/reservations", { method: "POST", body: JSON.stringify(reservationPayload) });
@@ -2085,6 +2768,9 @@ function bindReservationForm() {
     } catch (error) {
       setStatus(error.message, "error");
       setReservationGuestStatus(error.message, "error");
+    } finally {
+      isSubmitting = false;
+      if (submitBtn) submitBtn.disabled = false;
     }
   });
 }
@@ -2097,6 +2783,7 @@ function bindReservationPricing() {
   const nightsInput = document.getElementById("reservation-nights");
   const nightlyRateInput = document.getElementById("reservation-nightly-rate");
   const totalAmountInput = form.querySelector('input[name="total_amount"]');
+  const additionalChargeInput = form.querySelector('input[name="additional_charge"]');
   const totalSuggestion = document.getElementById("reservation-total-suggestion");
   if (!checkInInput || !checkOutInput || !nightsInput || !nightlyRateInput || !totalAmountInput || !totalSuggestion) return;
 
@@ -2114,8 +2801,13 @@ function bindReservationPricing() {
       return;
     }
 
-    const suggestedTotal = Math.round(nights * nightlyRate);
-    totalSuggestion.textContent = `Sugerencia: ${formatMoneyValue(suggestedTotal)} (${nights} noches x ${formatMoneyValue(nightlyRate)}).`;
+    const additionalCharge = Math.max(0, Number(additionalChargeInput?.value || 0));
+    const baseTotal = Math.round(nights * nightlyRate);
+    const suggestedTotal = baseTotal + additionalCharge;
+    const suggestionText = additionalCharge > 0
+      ? `Sugerencia: ${formatMoneyValue(suggestedTotal)} (${nights} noches x ${formatMoneyValue(nightlyRate)} + adicional ${formatMoneyValue(additionalCharge)}).`
+      : `Sugerencia: ${formatMoneyValue(suggestedTotal)} (${nights} noches x ${formatMoneyValue(nightlyRate)}).`;
+    totalSuggestion.textContent = suggestionText;
 
     const previousSuggestedTotal = totalAmountInput.dataset.lastSuggestedTotal || "";
     const currentTotalValue = String(totalAmountInput.value || "").trim();
@@ -2157,6 +2849,8 @@ function bindReservationPricing() {
   });
   checkInInput.addEventListener("change", recomputeNights);
   checkOutInput.addEventListener("change", recomputeNights);
+  additionalChargeInput?.addEventListener("input", updateSuggestedTotal);
+  additionalChargeInput?.addEventListener("change", updateSuggestedTotal);
   updateSuggestedTotal();
 }
 
@@ -2277,6 +2971,288 @@ function bindReservationEditButtons() {
   });
 }
 
+function openChangeCabinModal(reservationId) {
+  const reservation = (state.reservations || []).find((r) => Number(r.id) === reservationId);
+  if (!reservation) return;
+
+  const modal = document.getElementById("change-cabin-modal");
+  const form = document.getElementById("change-cabin-form");
+  const select = document.getElementById("change-cabin-select");
+  if (!modal || !form || !select) return;
+
+  const title = modal.querySelector("#change-cabin-modal-title");
+  if (title) title.textContent = `Cambiar cabaña — Reserva #${reservationId} (${reservation.guest_name || "huésped"})`;
+
+  form.querySelector('[name="reservation_id"]').value = String(reservationId);
+
+  select.innerHTML =
+    '<option value="">Seleccionar cabaña</option>' +
+    getOperationalCabins(state.cabins)
+      .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
+      .map((c) => `<option value="${c.id}"${c.id === reservation.cabin_id ? " selected" : ""}>${c.name || c.short_code || "#" + c.id}</option>`)
+      .join("");
+
+  openModal(modal);
+}
+
+function bindChangeCabinButtons() {
+  document.body.addEventListener("click", (event) => {
+    const button = event.target.closest(".btn-change-cabin");
+    if (!button) return;
+    const reservationId = Number(button.dataset.reservationId);
+    if (!Number.isInteger(reservationId) || reservationId <= 0) return;
+    openChangeCabinModal(reservationId);
+  });
+
+  const form = document.getElementById("change-cabin-form");
+  if (!form) return;
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const reservationId = Number(form.querySelector('[name="reservation_id"]').value);
+    const cabinId = Number(form.querySelector('[name="cabin_id"]').value);
+
+    if (!Number.isInteger(reservationId) || reservationId <= 0) return;
+    if (!Number.isInteger(cabinId) || cabinId <= 0) {
+      setStatus("Selecciona una cabaña válida.", "error");
+      return;
+    }
+
+    setStatus("Actualizando cabaña...", "");
+    try {
+      await api(`/api/reservations/${reservationId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ cabin_id: cabinId })
+      });
+      closeModal(form.closest(".form-modal"));
+      await loadAll();
+      setStatus("Cabaña actualizada", "ok");
+    } catch (error) {
+      setStatus(error.message, "error");
+    }
+  });
+}
+
+function openChangeGuestModal(reservationId) {
+  const reservation = (state.reservations || []).find((r) => Number(r.id) === reservationId);
+  if (!reservation) return;
+
+  const modal = document.getElementById("change-guest-modal");
+  const form = document.getElementById("change-guest-form");
+  const select = document.getElementById("change-guest-select");
+  const searchInput = document.getElementById("change-guest-search");
+  if (!modal || !form || !select || !searchInput) return;
+
+  const title = modal.querySelector("#change-guest-modal-title");
+  if (title) title.textContent = `Cambiar huésped — Reserva #${reservationId} (actual: ${reservation.guest_name || "desconocido"})`;
+
+  form.querySelector('[name="reservation_id"]').value = String(reservationId);
+  form.querySelector('[name="guest_id"]').value = "";
+  searchInput.value = "";
+
+  const allGuests = [...(state.guests || [])].sort((a, b) =>
+    String(a.full_name || "").localeCompare(String(b.full_name || ""))
+  );
+
+  const populateSelect = (filter) => {
+    const lower = String(filter || "").toLowerCase().trim();
+    const filtered = lower
+      ? allGuests.filter((g) => String(g.full_name || "").toLowerCase().includes(lower))
+      : allGuests;
+    select.innerHTML =
+      '<option value="">Seleccionar huésped</option>' +
+      filtered
+        .map((g) => {
+          const doc = g.document_id ? ` (${g.document_id})` : "";
+          const selected = Number(g.id) === Number(reservation.guest_id) ? " selected" : "";
+          return `<option value="${g.id}"${selected}>${g.full_name || "Sin nombre"}${doc} #${g.id}</option>`;
+        })
+        .join("");
+  };
+
+  populateSelect("");
+  searchInput.addEventListener("input", () => populateSelect(searchInput.value));
+
+  openModal(modal);
+}
+
+function bindChangeGuestButtons() {
+  document.body.addEventListener("click", (event) => {
+    const button = event.target.closest(".btn-change-guest");
+    if (!button) return;
+    const reservationId = Number(button.dataset.reservationId);
+    if (!Number.isInteger(reservationId) || reservationId <= 0) return;
+    openChangeGuestModal(reservationId);
+  });
+
+  const form = document.getElementById("change-guest-form");
+  if (!form) return;
+
+  const select = document.getElementById("change-guest-select");
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const reservationId = Number(form.querySelector('[name="reservation_id"]').value);
+    const guestId = Number(select?.value);
+
+    if (!Number.isInteger(reservationId) || reservationId <= 0) return;
+    if (!Number.isInteger(guestId) || guestId <= 0) {
+      setStatus("Selecciona un huésped válido.", "error");
+      return;
+    }
+
+    setStatus("Actualizando huésped...", "");
+    try {
+      await api(`/api/reservations/${reservationId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ guest_id: guestId })
+      });
+      closeModal(form.closest(".form-modal"));
+      await loadAll();
+      setStatus("Huésped actualizado", "ok");
+    } catch (error) {
+      setStatus(error.message, "error");
+    }
+  });
+}
+
+function openExpenseEditor(expenseId) {
+  const id = Number(expenseId);
+  if (!Number.isInteger(id) || id <= 0) return;
+  const row = (state.expenses || []).find((r) => Number(r.id) === id);
+  if (!row) {
+    setStatus(`Gasto #${id} no encontrado en memoria. Recargando...`, "");
+    loadAll();
+    return;
+  }
+
+  const modal = document.getElementById("expense-modal");
+  const form = document.getElementById("expense-form");
+  if (!modal || !form) return;
+
+  const title = modal.querySelector(".modal__header h3");
+  if (title) title.textContent = `Editar gasto #${id}`;
+
+  const monthKey = toDateKey(row.expense_date).slice(0, 7);
+  const setValue = (name, value) => {
+    const el = form.querySelector(`[name="${name}"]`);
+    if (el) el.value = value == null ? "" : String(value);
+  };
+
+  setValue("id", id);
+  setValue("expense_month", monthKey);
+  setValue("category", row.category || "");
+  setValue("payment_method", row.payment_method || "");
+  setValue("amount", row.amount != null ? Number(row.amount) : "");
+  setValue("supplier", row.supplier || "");
+  setValue("description", row.description || "");
+
+  openModal(modal);
+}
+
+function bindExpenseEditButtons() {
+  document.body.addEventListener("click", (event) => {
+    const button = event.target.closest(".btn-edit-expense");
+    if (!button) return;
+    const id = Number(button.dataset.expenseId);
+    openExpenseEditor(id);
+  });
+}
+
+function bindSaleForm() {
+  const form = document.getElementById("sale-form");
+  const modal = document.getElementById("sale-modal");
+  if (!form) return;
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const payload = normalize(toPayload(form));
+    const saleId = Number(payload.id);
+    delete payload.id;
+
+    const isEdit = Number.isInteger(saleId) && saleId > 0;
+    const endpoint = isEdit ? `/api/sales/${saleId}` : "/api/sales";
+    const method = isEdit ? "PATCH" : "POST";
+
+    setStatus(isEdit ? "Actualizando venta..." : "Guardando venta...", "");
+    try {
+      await api(endpoint, { method, body: JSON.stringify(payload) });
+      form.reset();
+      if (modal) {
+        const title = modal.querySelector(".modal__header h3");
+        if (title) title.textContent = "Registrar venta";
+      }
+      await loadAll();
+      if (window.reloadSalesReport) window.reloadSalesReport();
+      closeModal(modal);
+      setStatus(isEdit ? "Venta actualizada" : "Venta registrada", "ok");
+    } catch (error) {
+      setStatus(error.message, "error");
+    }
+  });
+}
+
+function openEditSaleModal(saleId) {
+  const modal = document.getElementById("sale-modal");
+  const form = document.getElementById("sale-form");
+  if (!modal || !form) return;
+
+  const sale = (state.sales || []).find(s => Number(s.id) === saleId);
+  if (!sale) {
+    setStatus("Venta no encontrada", "error");
+    return;
+  }
+
+  form.reset();
+  form.querySelector('[name="id"]').value = sale.id;
+  form.querySelector('[name="sale_date"]').value = toDateKey(sale.sale_date);
+  form.querySelector('[name="category"]').value = sale.category || "lodging";
+  form.querySelector('[name="payment_method"]').value = sale.payment_method || "";
+  form.querySelector('[name="amount"]').value = sale.amount || "";
+  const descInput = form.querySelector('[name="description"]');
+  if (descInput) descInput.value = sale.description || "";
+  const resInput = form.querySelector('[name="reservation_id"]');
+  if (resInput) resInput.value = sale.reservation_id || "";
+
+  const title = modal.querySelector(".modal__header h3");
+  if (title) title.textContent = `Editar venta #${sale.id}`;
+
+  openModal(modal);
+}
+
+function bindExpenseForm() {
+  const form = document.getElementById("expense-form");
+  const modal = document.getElementById("expense-modal");
+  if (!form) return;
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const payload = normalize(toPayload(form));
+    const expenseId = Number(payload.id);
+    delete payload.id;
+
+    const isEdit = Number.isInteger(expenseId) && expenseId > 0;
+    const endpoint = isEdit ? `/api/expenses/${expenseId}` : "/api/expenses";
+    const method = isEdit ? "PATCH" : "POST";
+
+    setStatus(isEdit ? "Actualizando gasto..." : "Guardando gasto...", "");
+
+    try {
+      await api(endpoint, { method, body: JSON.stringify(payload) });
+      form.reset();
+      if (modal) {
+        const title = modal.querySelector(".modal__header h3");
+        if (title) title.textContent = "Registrar gasto";
+      }
+      await loadAll();
+      closeModal(form.closest(".form-modal"));
+      setStatus(isEdit ? "Gasto actualizado" : "Gasto registrado", "ok");
+    } catch (error) {
+      setStatus(error.message, "error");
+    }
+  });
+}
+
 function bindDeleteButtons() {
   document.body.addEventListener("click", async (event) => {
     const button = event.target.closest(".btn-delete");
@@ -2285,15 +3261,29 @@ function bindDeleteButtons() {
     const { deleteType, id } = button.dataset;
     if (!deleteType || !id) return;
 
-    const confirmed = window.confirm(`Eliminar registro #${id}? Esta accion no se puede deshacer.`);
+    const actionLabel =
+      deleteType === "documents"
+        ? "Anular"
+        : "Eliminar";
+    const warning =
+      deleteType === "reservations"
+        ? "Se eliminará permanentemente la reserva cancelada y todas sus ventas asociadas. Esta acción no se puede deshacer."
+        : deleteType === "documents"
+          ? "El documento quedará en estado voided (trazable)."
+          : "Esta accion no se puede deshacer.";
+    const confirmed = window.confirm(`${actionLabel} registro #${id}? ${warning}`);
     if (!confirmed) return;
 
-    setStatus("Eliminando...", "");
+    setStatus(`${actionLabel}...`, "");
 
     try {
       await api(`/api/${deleteType}/${id}`, { method: "DELETE" });
       await loadAll();
-      setStatus(`Registro #${id} eliminado`, "ok");
+      const doneLabel =
+        deleteType === "documents"
+          ? "anulado"
+          : "eliminado";
+      setStatus(`Registro #${id} ${doneLabel}`, "ok");
     } catch (error) {
       setStatus(error.message, "error");
     }
@@ -2490,6 +3480,7 @@ function bindReservationsFilters() {
       await loadAll();
     });
   }
+
 }
 
 function bindDocumentsFilters() {
@@ -2534,7 +3525,11 @@ function openSaleModalForReservation(reservationId, amountDue, guestName) {
     if (dateInput) dateInput.value = today;
     if (amountInput) amountInput.value = amountDue > 0 ? amountDue : "";
     if (reservationInput) reservationInput.value = reservationId;
-    if (categoryInput) categoryInput.value = "lodging";
+    if (categoryInput) {
+      categoryInput.value = "abono";
+      categoryInput.style.pointerEvents = "none";
+      categoryInput.style.opacity = "0.6";
+    }
   }
 
   // Mostrar info de deuda
@@ -2554,7 +3549,7 @@ function openSaleModalForReservation(reservationId, amountDue, guestName) {
     }
   }
 
-  if (modalTitle) modalTitle.textContent = `Registrar cobro — Reserva #${reservationId}`;
+  if (modalTitle) modalTitle.textContent = `Registrar abono — Reserva #${reservationId}`;
 
   openModal(modal);
 }
@@ -2711,14 +3706,10 @@ function bindExportButtons() {
   }
 }
 
-for (const [formId, endpoint, message] of [
-  ["sale-form", "/api/sales", "Venta registrada"],
-  ["expense-form", "/api/expenses", "Gasto registrado"],
-  ["document-form", "/api/documents", "Documento registrado"]
-]) {
-  bindForm(formId, endpoint, message);
-}
+bindForm("document-form", "/api/documents", "Documento registrado");
+bindSaleForm();
 
+bindExpenseForm();
 bindGuestForm();
 bindReservationGuestLookup();
 bindReservationForm();
@@ -2726,6 +3717,9 @@ bindReservationPricing();
 bindGuestEditButtons();
 bindGuestHistoryButtons();
 bindReservationEditButtons();
+bindChangeCabinButtons();
+bindChangeGuestButtons();
+bindExpenseEditButtons();
 bindDeleteButtons();
 bindCabinForm();
 bindCabinFormOpenButtons();
@@ -2752,6 +3746,7 @@ const monthlyCharts = {};
 
 function setupSalesSection() {
   const periodType = document.getElementById("sales-period-type");
+  const periodBySelect = document.getElementById("sales-period-by");
   const monthSelect = document.getElementById("monthly-report-month");
   const yearSelect = document.getElementById("monthly-report-year");
   const quarterSelect = document.getElementById("sales-quarter");
@@ -2765,6 +3760,16 @@ function setupSalesSection() {
   const categoryFilter = document.getElementById("sales-filter-category");
 
   if (!monthSelect || !yearSelect) return;
+
+  if (periodBySelect) {
+    const current = String(state.salesPeriodBy || "check_in");
+    periodBySelect.value = current;
+    periodBySelect.addEventListener("change", () => {
+      state.salesPeriodBy = periodBySelect.value || "check_in";
+      window.localStorage.setItem("sales_period_by", state.salesPeriodBy);
+      loadMonthlyReport();
+    });
+  }
 
   // Llenar select de cabañas (se llama también desde loadAll)
   window.refreshVentasCabinFilter = () => {
@@ -2808,7 +3813,8 @@ function setupSalesSection() {
     const cabin = cabinFilter?.value || "";
     const cat = categoryFilter?.value || "";
 
-    let salesUrl = `/api/sales?from=${from}&to=${to}`;
+    const periodBy = String(state.salesPeriodBy || "check_in");
+    let salesUrl = `/api/sales?from=${from}&to=${to}&period_by=${encodeURIComponent(periodBy)}`;
     if (guest) salesUrl += `&q=${encodeURIComponent(guest)}`;
     if (cabin) salesUrl += `&cabin_id=${cabin}`;
     if (cat) salesUrl += `&category=${cat}`;
@@ -2821,6 +3827,8 @@ function setupSalesSection() {
       setStatus("No se pudo cargar el informe", "error");
     }
   };
+
+  window.reloadSalesReport = loadMonthlyReport;
 
   updatePeriodVisibility();
   periodType?.addEventListener("change", () => {
@@ -2995,43 +4003,62 @@ function renderMonthlyTables(from, to, sales, expenses) {
   if (salesTotalEl) salesTotalEl.textContent = money.format(totalSales);
   if (salesCountEl) salesCountEl.textContent = String(sales.length);
 
+  // Airbnb commission KPIs (3% of lodging amount from Airbnb reservations)
+  const airbnbLodging = sales
+    .filter(r => r.reservation_source === "airbnb" && r.category === "lodging")
+    .reduce((acc, r) => acc + Number(r.amount || 0), 0);
+  const airbnbCommission = Math.round(airbnbLodging * 0.03);
+  const airbnbNet = airbnbLodging - airbnbCommission;
+  const airbnbCard = document.getElementById("ventas-kpi-airbnb-card");
+  const airbnbNetCard = document.getElementById("ventas-kpi-airbnb-net-card");
+  const airbnbCommissionEl = document.getElementById("ventas-kpi-airbnb-commission");
+  const airbnbNetEl = document.getElementById("ventas-kpi-airbnb-net");
+  const hasAirbnb = airbnbLodging > 0;
+  if (airbnbCard) airbnbCard.hidden = !hasAirbnb;
+  if (airbnbNetCard) airbnbNetCard.hidden = !hasAirbnb;
+  if (airbnbCommissionEl) airbnbCommissionEl.textContent = money.format(airbnbCommission);
+  if (airbnbNetEl) airbnbNetEl.textContent = money.format(airbnbNet);
+
   const cabinById = new Map((state.cabins || []).map((c) => [Number(c.id), c]));
   const summary = {
     casa: { label: "CASA", count: 0, nights: 0, revenue: 0 },
     refugios: { label: "REFUGIOS", count: 0, nights: 0, revenue: 0 }
   };
 
-  salesBody.innerHTML = sales
-    .map(
-      (row) => {
-        const desc = row.description || row.reservation_notes || "-";
-        const isAdd = desc.includes("Cobro Adicional") || row.category === 'suplemento';
-        const short = desc.length > 20 ? desc.slice(0, 20) + "..." : desc;
-        
-        const rut = row.guest_document || "-";
-        const checkIn = row.reservation_check_in ? formatDate(row.reservation_check_in) : "-";
-        const checkOut = row.reservation_check_out ? formatDate(row.reservation_check_out) : "-";
-        const nights = row.reservation_nights || 0;
-        const rate = row.reservation_nightly_rate || 0;
-        const additional = row.reservation_additional_charge || 0;
-        const taxType = (row.guest_tax_type || "sii").toUpperCase();
+  // Agrupar sales por reservation_id para mostrar suplemento como sub-fila
+  const grouped = new Map();
+  for (const row of sales) {
+    const key = row.reservation_id != null ? `r_${row.reservation_id}` : `m_${row.id}`;
+    if (!grouped.has(key)) grouped.set(key, []);
+    grouped.get(key).push(row);
+  }
 
-        const cabin = cabinById.get(Number(row.cabin_id));
-        const isCasa = getCabinCapacity(cabin) >= 8;
-        const rc = isCasa ? "C" : "R";
-
-        if (row.category === "lodging") {
-          const bucket = isCasa ? summary.casa : summary.refugios;
-          bucket.count += 1;
-          bucket.nights += nights;
-          bucket.revenue += Number(row.amount || 0);
-        }
-
-        return `
+  const buildMainRow = (row) => {
+    const desc = row.description || row.reservation_notes || "-";
+    const short = desc.length > 20 ? desc.slice(0, 20) + "..." : desc;
+    const rut = row.guest_document || "-";
+    const checkIn = row.reservation_check_in ? formatDate(row.reservation_check_in) : "-";
+    const checkOut = row.reservation_check_out ? formatDate(row.reservation_check_out) : "-";
+    const nights = row.reservation_nights || 0;
+    const rate = row.reservation_nightly_rate || 0;
+    const additional = row.reservation_additional_charge || 0;
+    const taxType = (row.guest_tax_type || "sii").toUpperCase();
+    const cabin = cabinById.get(Number(row.cabin_id));
+    const isCasa = getCabinCapacity(cabin) >= 8;
+    const rc = isCasa ? "C" : "R";
+    const hasLink = row.reservation_id != null;
+    const guestLabel = row.guest_name || (hasLink ? "-" : "Sin reserva");
+    if (row.category === "lodging") {
+      const bucket = isCasa ? summary.casa : summary.refugios;
+      bucket.count += 1;
+      bucket.nights += nights;
+      bucket.revenue += Number(row.amount || 0);
+    }
+    return `
     <tr>
       <td>${formatDate(row.effective_period_date || row.reservation_check_out || row.sale_date)}</td>
       <td>
-        <div><strong>${row.guest_name || "-"}</strong></div>
+        <div><strong>${guestLabel}</strong>${hasLink ? "" : " <span class=\"badge badge--ghost\" style=\"font-size:0.7em; margin-left:6px;\">manual</span>"}</div>
         <div style="font-size:0.8em; color:gray;">${rut}</div>
       </td>
       <td>
@@ -3050,19 +4077,80 @@ function renderMonthlyTables(from, to, sales, expenses) {
       <td><strong>${money.format(row.amount)}</strong></td>
       <td>${paymentLabels[row.payment_method] || row.payment_method || "-"}</td>
       <td><span class="badge badge--ghost" style="font-size:0.7em;">${taxType}</span></td>
-      <td title="${desc}" style="cursor:help; font-size:0.85em;">
-        ${isAdd ? "📌 " : ""}${short}
-      </td>
+      <td title="${desc}" style="cursor:help; font-size:0.85em;">${short}</td>
       <td>
         <div style="display:flex; gap:4px;">
           <button class="btn btn--ghost btn--sm" onclick="alert('${desc.replace(/'/g, "\\'")}')" title="Ver nota completa">Ver</button>
+          <button class="btn btn--ghost btn--sm" onclick="openEditSaleModal(${Number(row.id || 0)})">Editar</button>
+          ${hasLink ? "" : `<button class="btn btn--ghost btn--sm" onclick="linkSaleToReservation(${Number(row.id || 0)})" title="Vincular a una reserva para mostrar huésped/cabaña/estadía">Vincular</button>`}
           ${deleteButton("sales", row.id)}
         </div>
       </td>
     </tr>`;
-      }
-    )
-    .join("") || "<tr><td colspan='12'>Sin ventas en este mes</td></tr>";
+  };
+
+  const buildSubRow = (row) => {
+    const desc = row.description || "-";
+    const short = desc.length > 28 ? desc.slice(0, 28) + "..." : desc;
+    const isAbono = row.category === "abono";
+    const color = isAbono ? "var(--color-success, #22c55e)" : "var(--color-warning, #f59e0b)";
+    const icon = isAbono ? "💰" : "📌";
+    const label = isAbono ? "Abono" : "Cobro adicional";
+    return `
+    <tr style="background: color-mix(in srgb, ${color} 6%, transparent); border-top: none;">
+      <td></td>
+      <td colspan="6" style="padding-left:2rem; font-size:0.82em; color: var(--color-text-muted, #888); border-top:none;">
+        <span style="border-left: 3px solid ${color}; padding-left: 0.5rem;">
+          ${icon} <em>${label}</em>
+        </span>
+        <span style="margin-left:0.5rem; font-size:0.9em;" title="${desc}">${short}</span>
+      </td>
+      <td><strong style="color: ${color};">${isAbono ? "-" : "+"}${money.format(row.amount)}</strong></td>
+      <td colspan="2"></td>
+      <td></td>
+      <td>
+        <div style="display:flex; gap:4px;">
+          <button class="btn btn--ghost btn--sm" onclick="alert('${desc.replace(/'/g, "\\'")}')" title="Ver nota completa">Ver</button>
+          <button class="btn btn--ghost btn--sm" onclick="openEditSaleModal(${Number(row.id || 0)})">Editar</button>
+          ${deleteButton("sales", row.id)}
+        </div>
+      </td>
+    </tr>`;
+  };
+
+  const buildAirbnbCommissionRow = (lodgingAmount) => {
+    const commission = Math.round(lodgingAmount * 0.03);
+    const net = lodgingAmount - commission;
+    return `
+    <tr style="background: color-mix(in srgb, #f59e0b 6%, transparent); border-top: none;">
+      <td></td>
+      <td colspan="6" style="padding-left:2rem; font-size:0.82em; color: var(--color-text-muted, #888); border-top:none;">
+        <span style="border-left: 3px solid #f59e0b; padding-left: 0.5rem;">
+          🏨 <em>Comisión Airbnb (3%)</em>
+        </span>
+      </td>
+      <td><strong style="color:#f59e0b;">-${money.format(commission)}</strong> <span style="font-size:0.8em; color:gray;">→ Neto ${money.format(net)}</span></td>
+      <td colspan="3"></td>
+      <td></td>
+    </tr>`;
+  };
+
+  const rowsHtml = [];
+  for (const [, group] of grouped) {
+    const main = group.find(r => r.category === "lodging") || group[0];
+    const subs = group.filter(r => r !== main && (r.category === "suplemento" || r.category === "abono"));
+    rowsHtml.push(buildMainRow(main));
+    if (main.category === "lodging" && main.reservation_source === "airbnb" && Number(main.amount) > 0) {
+      rowsHtml.push(buildAirbnbCommissionRow(Number(main.amount)));
+    }
+    for (const sub of subs) rowsHtml.push(buildSubRow(sub));
+    // ventas manuales sin categoría lodging/suplemento/abono en el mismo grupo
+    for (const other of group.filter(r => r !== main && r.category !== "suplemento" && r.category !== "abono")) {
+      rowsHtml.push(buildMainRow(other));
+    }
+  }
+
+  salesBody.innerHTML = rowsHtml.join("") || "<tr><td colspan='12'>Sin ventas en este mes</td></tr>";
 
   if (summaryBody) {
     summaryBody.innerHTML = [summary.casa, summary.refugios]
@@ -3088,6 +4176,32 @@ function channelLetter(source) {
   if (s === "other") return "O";
   return "";
 }
+
+window.linkSaleToReservation = async function linkSaleToReservation(saleId) {
+  if (!Number.isInteger(Number(saleId)) || Number(saleId) <= 0) return;
+  const raw = window.prompt("Ingresa el # de reserva para vincular esta venta (vacío para desvincular):", "");
+  if (raw === null) return;
+  const trimmed = String(raw).trim();
+  const reservation_id = trimmed === "" ? null : Number(trimmed);
+  if (trimmed !== "" && (!Number.isInteger(reservation_id) || reservation_id <= 0)) {
+    setStatus("Reserva inválida. Usa un número entero (ej: 123).", "error");
+    return;
+  }
+  try {
+    await api(`/api/sales/${saleId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ reservation_id })
+    });
+    if (typeof window.reloadSalesReport === "function") {
+      await window.reloadSalesReport();
+    } else {
+      await loadAll();
+    }
+    setStatus("Venta vinculada", "ok");
+  } catch (err) {
+    setStatus(err?.message || "No se pudo vincular la venta", "error");
+  }
+};
 
 function reservationNights(row) {
   const raw = Number(row?.nights);
@@ -3292,6 +4406,147 @@ async function warmupAndStart() {
       }
     });
   }
+}
+
+// ── UI helpers: confirm modal & toast ───────────────────────────────────────
+
+let _confirmCallback = null;
+
+function showConfirm({ title = "Confirmar acción", body = "", okLabel = "Confirmar", okClass = "btn--primary" } = {}, onConfirm) {
+  const modal = document.getElementById("confirm-modal");
+  const titleEl = document.getElementById("confirm-modal-title");
+  const bodyEl = document.getElementById("confirm-modal-body");
+  const okBtn = document.getElementById("confirm-modal-ok");
+  if (!modal) return;
+  if (titleEl) titleEl.textContent = title;
+  if (bodyEl) bodyEl.textContent = body;
+  if (okBtn) {
+    okBtn.className = `btn ${okClass}`;
+    okBtn.textContent = okLabel;
+    okBtn.onclick = () => { closeConfirm(); onConfirm(); };
+  }
+  _confirmCallback = onConfirm;
+  modal.hidden = false;
+  document.body.classList.add("modal-open");
+}
+
+function closeConfirm() {
+  const modal = document.getElementById("confirm-modal");
+  if (modal) modal.hidden = true;
+  _confirmCallback = null;
+  if (!document.querySelector(".form-modal:not([hidden])")) {
+    document.body.classList.remove("modal-open");
+  }
+}
+
+let _toastTimer = null;
+function showToast(message, type = "") {
+  const toast = document.getElementById("toast");
+  if (!toast) return;
+  if (_toastTimer) clearTimeout(_toastTimer);
+  toast.textContent = message;
+  toast.className = `toast${type ? ` toast--${type}` : ""}`;
+  toast.hidden = false;
+  requestAnimationFrame(() => toast.classList.add("toast--visible"));
+  _toastTimer = setTimeout(() => {
+    toast.classList.remove("toast--visible");
+    setTimeout(() => { toast.hidden = true; }, 220);
+  }, 3500);
+}
+
+// ── Historial de pagos por reserva ──────────────────────────────────────────
+
+async function togglePaymentHistory(reservationId) {
+  const panel = document.getElementById(`payment-history-${reservationId}`);
+  const btn = document.getElementById(`abono-btn-${reservationId}`);
+  if (!panel) return;
+
+  if (!panel.hidden) {
+    panel.hidden = true;
+    if (btn) btn.classList.remove("is-open");
+    return;
+  }
+
+  if (btn) btn.classList.add("is-open");
+  panel.hidden = false;
+  panel.innerHTML = `<span class="payment-history__empty">Cargando…</span>`;
+
+  try {
+    const res = await fetch(`/api/sales/by-reservation/${reservationId}`, {
+      headers: { Authorization: `Bearer ${getAuthToken()}` }
+    });
+    if (!res.ok) throw new Error("Error al cargar historial");
+    const payments = await res.json();
+
+    const abonos = payments.filter(p => p.category === "abono");
+
+    if (!abonos.length) {
+      panel.innerHTML = `<span class="payment-history__empty">Sin abonos registrados.</span>`;
+      return;
+    }
+
+    const abonoChips = abonos.map(p => `
+      <span class="payment-history__item">
+        <span>${formatDate(p.sale_date)}</span>
+        <strong>${money.format(p.amount)}</strong>
+        <button class="payment-history__delete" onclick="deleteAbono(${p.id}, ${reservationId})" title="Eliminar abono">✕</button>
+      </span>`).join("");
+
+    panel.innerHTML = `<span class="payment-history__label">Abonos:</span>${abonoChips}`;
+  } catch {
+    panel.innerHTML = `<span class="payment-history__empty" style="color:var(--danger)">Error al cargar.</span>`;
+  }
+}
+
+function deleteAbono(saleId, reservationId) {
+  showConfirm(
+    { title: "Eliminar abono", body: "¿Eliminar este abono? Esta acción no se puede deshacer.", okLabel: "Eliminar", okClass: "btn--danger" },
+    async () => {
+      try {
+        const res = await fetch(`/api/sales/${saleId}`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${getAuthToken()}` }
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          showToast(data.error || "Error al eliminar el abono", "error");
+          return;
+        }
+        showToast("Abono eliminado", "ok");
+        await loadAll();
+      } catch {
+        showToast("Error de red al eliminar el abono", "error");
+      }
+    }
+  );
+}
+
+function migrateReservationPayment(reservationId, guestName) {
+  showConfirm(
+    {
+      title: "Migrar pago",
+      body: `¿Marcar la reserva #${reservationId} (${guestName}) como pagada? Esto crea un abono de migración por el total de la reserva. Úsalo solo si la reserva ya estaba pagada.`,
+      okLabel: "Sí, migrar",
+      okClass: ""
+    },
+    async () => {
+      try {
+        const res = await fetch(`/api/reservations/migrate-payments`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${getAuthToken()}`, "Content-Type": "application/json" }
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          showToast(data.error || "Error en la migración", "error");
+          return;
+        }
+        showToast(data.message || "Migración completada", "ok");
+        await loadAll();
+      } catch {
+        showToast("Error de red en la migración", "error");
+      }
+    }
+  );
 }
 
 warmupAndStart();
