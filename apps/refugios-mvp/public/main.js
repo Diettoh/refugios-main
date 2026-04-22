@@ -1346,13 +1346,17 @@ function getDayGuestLines(activeReservations, cabins, dateKey) {
     const cabinId = Number(cabin.id);
     const row = byCabinId.get(cabinId) || null;
     const palette = getCalendarCabinPalette(cabin, idx);
-    if (!row) return { label: "", status: "", palette, cabinIndex: idx, isEmpty: true };
+    if (!row) return { label: "", status: "", palette, cabinIndex: idx, cabinId, isEmpty: true };
 
     // Día de rotación o solapamiento: devolver múltiples huéspedes si existen.
     const turnovers = turnoverByCabinId.get(cabinId) || null;
     if (turnovers && turnovers.length >= 2) {
-      // Ordenar por check_in para mostrar salida primero
-      const sorted = [...turnovers].sort((a, b) => dateWeight(a.check_in) - dateWeight(b.check_in) || (a.id || 0) - (b.id || 0));
+      // Check-in (arriving today) va primero; check-out (departing) va abajo
+      const sorted = [...turnovers].sort((a, b) => {
+        const aIsIn = toDateKey(a.check_in) === targetKey ? 0 : 1;
+        const bIsIn = toDateKey(b.check_in) === targetKey ? 0 : 1;
+        return aIsIn - bIsIn;
+      });
       const subRows = sorted.map(r => {
         const name = String(r.guest_name || "").trim().toUpperCase();
         const guests = Number(r.guests_count) || 1;
@@ -1367,9 +1371,10 @@ function getDayGuestLines(activeReservations, cabins, dateKey) {
         isTurnover: true,
         subRows,
         guestKey: normalizeSearchKey(turnovers.map(r => r.guest_name).join(" ")),
-        status: row.status, // Usamos el status de la última reserva activa para el color
+        status: row.status,
         palette,
         cabinIndex: idx,
+        cabinId,
         isEmpty: false
       };
     }
@@ -1387,6 +1392,7 @@ function getDayGuestLines(activeReservations, cabins, dateKey) {
       status: row.status,
       palette,
       cabinIndex: idx,
+      cabinId,
       isCheckIn,
       isLastNight,
       isEmpty: false
@@ -1419,7 +1425,9 @@ function renderCalendarDay(dateKey, dayLabel, dayClasses, reservations, cabins, 
   const guestHtml = guests.length
     ? guests
         .map((line) => {
-          if (!line || (!line.label && !line.isTurnover)) return `<span class="calendar-guest-row is-empty"></span>`;
+          const cabinAttr = line.cabinId ? ` data-cabin-id="${line.cabinId}"` : "";
+          const addBtn = `<span class="calendar-guest-add" title="Nueva reserva">+</span>`;
+          if (!line || (!line.label && !line.isTurnover)) return `<span class="calendar-guest-row is-empty"${cabinAttr}>${addBtn}</span>`;
           const isFiltering = Boolean(query);
           const isMatch = !isFiltering || (line.guestKey && line.guestKey.includes(query));
           const classes = ["calendar-guest-row"];
@@ -1434,16 +1442,18 @@ function renderCalendarDay(dateKey, dayLabel, dayClasses, reservations, cabins, 
               const flags = [];
               if (sub.isCheckIn) flags.push(`<span class="calendar-flag is-in">IN</span>`);
               if (sub.isLastNight) flags.push(`<span class="calendar-flag is-out">OUT</span>`);
-              return `<span class="calendar-turnover-row">${flags.join("")}<span class="calendar-guest-row__text">${sub.label}</span></span>`;
+              // IN: fondo sólido de la cabaña; OUT: fondo semitransparente para distinguir visualmente
+              const rowBg = sub.isCheckIn ? line.palette.bg : line.palette.soft;
+              const rowText = sub.isCheckIn ? line.palette.text : "rgba(226,232,240,0.9)";
+              return `<span class="calendar-turnover-row" style="background:${rowBg};color:${rowText}">${flags.join("")}<span class="calendar-guest-row__text">${sub.label}</span></span>`;
             }).join("");
 
             if (isPdf) {
-              const pdfColor = line.status === "confirmed" ? "#b91c1c" : line.palette.text;
-              return `<span class="${classes.join(" ")}" style="background:${line.palette.bg};color:${pdfColor};border-left:4px solid ${line.palette.border}">
+              return `<span class="${classes.join(" ")}"${cabinAttr} style="border-left:3px solid ${line.palette.border}">
                 ${rowsHtml}
               </span>`;
             }
-            return `<span class="${classes.join(" ")}" style="background:${line.palette.bg};color:${line.palette.text}">
+            return `<span class="${classes.join(" ")}"${cabinAttr} style="border-left:3px solid ${line.palette.border}">
               ${rowsHtml}
             </span>`;
           }
@@ -1454,12 +1464,12 @@ function renderCalendarDay(dateKey, dayLabel, dayClasses, reservations, cabins, 
 
           if (isPdf) {
             const pdfColor = line.status === "confirmed" ? "#b91c1c" : line.palette.text;
-            return `<span class="${classes.join(" ")}" style="background:${line.palette.bg};color:${pdfColor};border-left:4px solid ${line.palette.border}">
+            return `<span class="${classes.join(" ")}"${cabinAttr} style="background:${line.palette.bg};color:${pdfColor};border-left:4px solid ${line.palette.border}">
               ${flags.join("")}<span class="calendar-guest-row__text">${line.label}</span>
             </span>`;
           }
-          return `<span class="${classes.join(" ")}" style="background:${line.palette.bg};color:${line.palette.text}">
-            ${flags.join("")}<span class="calendar-guest-row__text">${line.label}</span>
+          return `<span class="${classes.join(" ")}"${cabinAttr} style="background:${line.palette.bg};color:${line.palette.text}">
+            ${flags.join("")}<span class="calendar-guest-row__text">${line.label}</span>${addBtn}
           </span>`;
         })
         .join("")
@@ -1850,6 +1860,14 @@ function setupCalendarControls() {
   }
 
   document.body.addEventListener("click", (e) => {
+    // Quick-add desde botón "+" en fila de cabaña del panel mensual
+    if (e.target.classList.contains("calendar-guest-add")) {
+      const row = e.target.closest(".calendar-guest-row[data-cabin-id]");
+      const dayEl = e.target.closest(".calendar-day[data-date]");
+      if (row && dayEl) openReservationWithContext(row.dataset.cabinId, dayEl.dataset.date);
+      return;
+    }
+
     const dayBtn = e.target.closest(".calendar-day[data-date]");
     if (!dayBtn) return;
     const date = dayBtn.dataset.date;
