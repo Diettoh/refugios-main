@@ -1799,24 +1799,45 @@ function setupCalendarControls() {
   }
 
   if (viewBtn) {
-    const VIEW_ORDER = ["week", "panel", "timeline", "pdf"];
-    const VIEW_NEXT_LABEL = {
-      week: "Vista mensual",
-      panel: "Vista timeline",
-      timeline: "Vista PDF",
-      pdf: "Vista semana"
+    const applyViewLabels = () => {
+      const isPrimary = state.calendarView === "week" || state.calendarView === "panel";
+      viewBtn.textContent = state.calendarView === "week" ? "Vista mensual" : "Vista semana";
+      viewBtn.style.fontWeight = isPrimary ? "" : "normal";
+      const pdfBtn2 = document.getElementById("calendar-pdf-toggle");
+      if (pdfBtn2) {
+        pdfBtn2.textContent = state.calendarView === "timeline" ? "Vista PDF" : state.calendarView === "pdf" ? "Vista mensual" : "PDF";
+        pdfBtn2.style.opacity = (state.calendarView === "timeline" || state.calendarView === "pdf") ? "1" : "0.55";
+      }
     };
-    const applyLabel = () => {
-      viewBtn.textContent = VIEW_NEXT_LABEL[state.calendarView] || "Vista semana";
-    };
-    applyLabel();
+    applyViewLabels();
     viewBtn.addEventListener("click", () => {
-      const idx = Math.max(0, VIEW_ORDER.indexOf(state.calendarView));
-      state.calendarView = VIEW_ORDER[(idx + 1) % VIEW_ORDER.length];
+      // Primary toggle: week ↔ panel
+      if (state.calendarView === "week" || state.calendarView === "panel") {
+        state.calendarView = state.calendarView === "week" ? "panel" : "week";
+      } else {
+        // From timeline/pdf, go back to week
+        state.calendarView = "week";
+      }
       window.localStorage.setItem("calendar_view", state.calendarView);
-      applyLabel();
+      applyViewLabels();
       renderCalendar(state.calendarReservations || []);
     });
+
+    const pdfBtn = document.getElementById("calendar-pdf-toggle");
+    if (pdfBtn) {
+      pdfBtn.addEventListener("click", () => {
+        if (state.calendarView === "timeline") {
+          state.calendarView = "pdf";
+        } else if (state.calendarView === "pdf") {
+          state.calendarView = "week";
+        } else {
+          state.calendarView = "timeline";
+        }
+        window.localStorage.setItem("calendar_view", state.calendarView);
+        applyViewLabels();
+        renderCalendar(state.calendarReservations || []);
+      });
+    }
   }
 
   if (guestSearch) {
