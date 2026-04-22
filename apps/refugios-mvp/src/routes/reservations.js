@@ -375,12 +375,19 @@ router.post("/", async (req, res, next) => {
       }
 
       const doc = normalizedGuestDocument;
-      
+
       let existingGuest = { rowCount: 0 };
       if (doc) {
         existingGuest = await query("SELECT id FROM guests WHERE document_id = $1 LIMIT 1", [doc]);
       }
-      
+      // Fallback: buscar por nombre exacto (case-insensitive) para evitar duplicados
+      if (existingGuest.rowCount === 0) {
+        existingGuest = await query(
+          "SELECT id FROM guests WHERE lower(trim(full_name)) = lower(trim($1)) LIMIT 1",
+          [normalizedGuestName]
+        );
+      }
+
       if (existingGuest.rowCount > 0) {
         parsedGuestId = existingGuest.rows[0].id;
       } else {
