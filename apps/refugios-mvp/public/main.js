@@ -2266,14 +2266,16 @@ async function loadAll() {
         ${chip(`Llega ${formatDate(row.check_in)}${row.check_in_time ? " " + String(row.check_in_time).slice(0, 5) : ""}`)}
         ${chip(`Sale ${formatDate(row.check_out)}${row.checkout_time ? " " + String(row.checkout_time).slice(0, 5) : ""}`)}
         ${row.nights != null ? chip(`${row.nights} noche${Number(row.nights) === 1 ? "" : "s"}`) : ""}
-        ${Number(row.total_amount) === 0 ? chip("Sin monto — editar", "debt-pending") : chip(`Total ${money.format(row.total_amount)}`)}
         ${(() => {
           if (row.source === "airbnb" && Number(row.total_amount) > 0) {
             const commission = Math.round(row.total_amount * 0.03);
             const net = row.total_amount - commission;
-            return chip(`Comisión Airbnb -${money.format(commission)} → Neto ${money.format(net)}`, "badge--ghost");
+            return chip(`Comisión -${money.format(commission)}`, "badge--ghost") +
+                   chip(`Neto ${money.format(net)}`, "badge--info");
           }
-          return "";
+          return Number(row.total_amount) === 0
+            ? chip("Sin monto — editar", "debt-pending")
+            : chip(`Total ${money.format(row.total_amount)}`);
         })()}
         <button type="button" class="chip chip--btn" id="abono-btn-${row.id}" onclick="togglePaymentHistory(${row.id})">
           Abonado ${money.format(row.paid_amount || 0)} ▾
