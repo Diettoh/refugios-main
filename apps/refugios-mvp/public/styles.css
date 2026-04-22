@@ -1297,9 +1297,7 @@ h2.section__title {
   font-weight: 700;
   line-height: 1.12;
   letter-spacing: 0.01em;
-  padding: 0.1rem 0.18rem;
-  border-left: 2px solid rgba(45, 212, 191, 0.95);
-  background: rgba(30, 41, 59, 0.34);
+  padding: 0.1rem 0.25rem;
   border-radius: 3px;
   overflow: hidden;
 }

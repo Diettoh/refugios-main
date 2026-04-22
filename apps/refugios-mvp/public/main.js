@@ -105,7 +105,7 @@ const state = {
   periodTo: "",
   availabilityDate: new Date().toISOString().slice(0, 10),
   calendarMonth: new Date().toISOString().slice(0, 7),
-  calendarView: window.localStorage.getItem("calendar_view") || "week",
+  calendarView: window.localStorage.getItem("calendar_view") || "panel",
   calendarWeekStart: null,
   calendarGuestQuery: window.localStorage.getItem("calendar_guest_query") || "",
   salesPeriodBy: "check_in",
@@ -1151,7 +1151,7 @@ function renderWeekCell(cabin, dateKey, reservations, today) {
 
   let blocksHtml = "";
   for (const blk of blocks) {
-    const color = getReservationColor(blk.r.id);
+    const color = getCabinColor(cabin);
     const guest = blk.r.guest_name || "Huésped";
     const firstName = guest.split(" ")[0];
     const rid = blk.r.id;
@@ -1443,7 +1443,7 @@ function renderCalendarDay(dateKey, dayLabel, dayClasses, reservations, cabins, 
                 ${rowsHtml}
               </span>`;
             }
-            return `<span class="${classes.join(" ")}" style="border-left-color:${line.palette.border};background:${line.palette.soft}">
+            return `<span class="${classes.join(" ")}" style="background:${line.palette.bg};color:${line.palette.text}">
               ${rowsHtml}
             </span>`;
           }
@@ -1458,7 +1458,7 @@ function renderCalendarDay(dateKey, dayLabel, dayClasses, reservations, cabins, 
               ${flags.join("")}<span class="calendar-guest-row__text">${line.label}</span>
             </span>`;
           }
-          return `<span class="${classes.join(" ")}" style="border-left-color:${line.palette.border};background:${line.palette.soft}">
+          return `<span class="${classes.join(" ")}" style="background:${line.palette.bg};color:${line.palette.text}">
             ${flags.join("")}<span class="calendar-guest-row__text">${line.label}</span>
           </span>`;
         })
@@ -1805,18 +1805,18 @@ function setupCalendarControls() {
       viewBtn.style.fontWeight = isPrimary ? "" : "normal";
       const pdfBtn2 = document.getElementById("calendar-pdf-toggle");
       if (pdfBtn2) {
-        pdfBtn2.textContent = state.calendarView === "timeline" ? "Vista PDF" : state.calendarView === "pdf" ? "Vista mensual" : "PDF";
+        pdfBtn2.textContent = state.calendarView === "timeline" ? "Vista PDF" : state.calendarView === "pdf" ? "← Panel" : "PDF";
         pdfBtn2.style.opacity = (state.calendarView === "timeline" || state.calendarView === "pdf") ? "1" : "0.55";
       }
     };
     applyViewLabels();
     viewBtn.addEventListener("click", () => {
-      // Primary toggle: week ↔ panel
+      // Primary toggle: panel ↔ week
       if (state.calendarView === "week" || state.calendarView === "panel") {
         state.calendarView = state.calendarView === "week" ? "panel" : "week";
       } else {
-        // From timeline/pdf, go back to week
-        state.calendarView = "week";
+        // From timeline/pdf, go back to panel
+        state.calendarView = "panel";
       }
       window.localStorage.setItem("calendar_view", state.calendarView);
       applyViewLabels();
@@ -1829,7 +1829,7 @@ function setupCalendarControls() {
         if (state.calendarView === "timeline") {
           state.calendarView = "pdf";
         } else if (state.calendarView === "pdf") {
-          state.calendarView = "week";
+          state.calendarView = "panel";
         } else {
           state.calendarView = "timeline";
         }
