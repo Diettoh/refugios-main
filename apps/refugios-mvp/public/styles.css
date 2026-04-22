@@ -1219,7 +1219,8 @@ h2.section__title {
 }
 
 .calendar-day {
-  aspect-ratio: 1;
+  height: 9.5rem;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -1227,8 +1228,7 @@ h2.section__title {
   border-radius: var(--radius-sm);
   font-size: 0.75rem;
   cursor: pointer;
-  transition: all var(--transition);
-  min-height: 6.9rem;
+  transition: background var(--transition), box-shadow var(--transition);
   padding: 0.28rem;
   border: 1px solid rgba(148, 163, 184, 0.22);
   text-align: left;
@@ -1301,10 +1301,12 @@ h2.section__title {
 }
 
 .calendar-day__guest-list {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   gap: 0.14rem;
-  min-height: 2.45rem;
 }
 
 .calendar-guest-row {
@@ -1317,8 +1319,9 @@ h2.section__title {
   line-height: 1.12;
   letter-spacing: 0.01em;
   padding: 0.1rem 0.25rem;
-  border-radius: 3px;
+  border-radius: 2px;
   overflow: hidden;
+  flex-shrink: 0;
 }
 
 .calendar-guest-row__text {
@@ -1326,9 +1329,8 @@ h2.section__title {
   overflow: hidden;
   text-overflow: ellipsis;
   min-width: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  flex: 1;
+  font-size: 0.66rem;
 }
 
 .calendar-flag {
@@ -1367,7 +1369,7 @@ h2.section__title {
 }
 
 .calendar-turnover-row .calendar-guest-row__text {
-  font-size: 0.6rem;
+  font-size: 0.66rem;
 }
 
 .calendar-guest-row.is-empty {
@@ -1407,8 +1409,9 @@ h2.section__title {
 
 .calendar-day__cabin-row {
   margin-top: auto;
+  flex-shrink: 0;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 0.2rem;
 }
 
