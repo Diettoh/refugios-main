@@ -1351,11 +1351,11 @@ function getDayGuestLines(activeReservations, cabins, dateKey) {
     // Día de rotación o solapamiento: devolver múltiples huéspedes si existen.
     const turnovers = turnoverByCabinId.get(cabinId) || null;
     if (turnovers && turnovers.length >= 2) {
-      // OUT primero (sale), luego IN (llega) — orden de gestión natural
+      // IN primero (llega), luego OUT (sale)
       const sorted = [...turnovers].sort((a, b) => {
-        const aIsOut = toDateKey(a.check_out) === targetKey ? 0 : 1;
-        const bIsOut = toDateKey(b.check_out) === targetKey ? 0 : 1;
-        return aIsOut - bIsOut;
+        const aIsIn = toDateKey(a.check_in) === targetKey ? 0 : 1;
+        const bIsIn = toDateKey(b.check_in) === targetKey ? 0 : 1;
+        return aIsIn - bIsIn;
       });
       const subRows = sorted.map(r => {
         const name = String(r.guest_name || "").trim().toUpperCase();
@@ -1448,8 +1448,8 @@ function renderCalendarDay(dateKey, dayLabel, dayClasses, reservations, cabins, 
             classes.push("is-turnover");
             const rowsHtml = (line.subRows || []).map(sub => {
               const flags = [];
-              if (sub.isLastNight) flags.push(`<span class="calendar-flag is-out">OUT</span>`);
               if (sub.isCheckIn)   flags.push(`<span class="calendar-flag is-in">IN</span>`);
+              if (sub.isLastNight) flags.push(`<span class="calendar-flag is-out">OUT</span>`);
               const rowBg   = sub.isCheckIn ? line.palette.bg   : line.palette.soft;
               const rowText = sub.isCheckIn ? line.palette.text : "rgba(226,232,240,0.9)";
               const radius  = barRadius(sub.isCheckIn, sub.isLastNight);
@@ -1463,8 +1463,8 @@ function renderCalendarDay(dateKey, dayLabel, dayClasses, reservations, cabins, 
           }
 
           const flags = [];
-          if (line.isLastNight) flags.push(`<span class="calendar-flag is-out" title="Check-out">OUT</span>`);
           if (line.isCheckIn)   flags.push(`<span class="calendar-flag is-in"  title="Check-in">IN</span>`);
+          if (line.isLastNight) flags.push(`<span class="calendar-flag is-out" title="Check-out">OUT</span>`);
           const radius = barRadius(line.isCheckIn, line.isLastNight);
 
           if (isPdf) {
