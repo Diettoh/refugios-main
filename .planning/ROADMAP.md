@@ -101,6 +101,21 @@ Plans:
 
 ---
 
+### Phase 6: UX Polish — Ventas y Gastos
+**Goal**: Las vistas de Ventas y Gastos muestran el período actual por defecto y tienen filtros claros
+**Depends on**: Nothing (frontend-only UX fixes)
+**Requirements**: UX-01, UX-02
+**Success Criteria** (what must be TRUE):
+  1. La vista Ventas abre por defecto en el mes actual (no en el año completo)
+  2. La vista Gastos muestra por defecto el mes actual
+  3. El admin puede cambiar el período manualmente sin fricción
+**Plans**: 1 plan
+
+Plans:
+- [ ] 06-01-PLAN.md — Wave 1: Ventas default "month" + Gastos default current month (main.js only)
+
+---
+
 ## Progress
 
 | Phase | Plans Complete | Status | Completed |
@@ -110,6 +125,7 @@ Plans:
 | 3. Dashboard Completo | 0/? | Not started | - |
 | 4. Utilidad Neta | 0/? | Blocked (fórmula pendiente) | - |
 | 5. Abonos | 1/2 | In progress | - |
+| 6. UX Polish — Ventas y Gastos | 0/1 | Planned | - |
 
 ---
 
@@ -131,10 +147,12 @@ Plans:
 | PAY-01 | Phase 5 | Auto-sales on reservation create — Plan 05-01 + 05-02 |
 | PAY-02 | Phase 5 | Abonos registration from reservation card — Plan 05-01 + 05-02 |
 | PAY-03 | Phase 5 | Debt status display — Plan 05-01 + 05-02 |
+| UX-01 | Phase 6 | Ventas default period = current month — Plan 06-01 |
+| UX-02 | Phase 6 | Gastos default month = current month — Plan 06-01 |
 
-**Coverage:** 11/11 requirements mapped (100%) ✓
+**Coverage:** 13/13 requirements mapped (100%) ✓
 
 ---
 
 *Roadmap created: 2026-03-16*
-*Last updated: 2026-04-23 — Phase 5 planned (2 plans, 2 waves)*
+*Last updated: 2026-04-23 — Phase 6 added (UX Polish ventas/gastos)*
