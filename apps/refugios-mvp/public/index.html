@@ -89,9 +89,30 @@
     <!-- Warmup / login overlay -->
     <div class="warmup-overlay" id="warmup-overlay" hidden>
       <div class="warmup-card">
-        <h1>Refugios Malalcahuello</h1>
-        <p id="warmup-message">Despertando servidor…</p>
-        <form id="login-form" class="modal__form">
+        <!-- Cabin icon -->
+        <div class="warmup-icon">
+          <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+            <polyline points="9 22 9 12 15 12 15 22"/>
+          </svg>
+        </div>
+
+        <h1>Refugios AvA</h1>
+
+        <!-- Phase 1: connecting -->
+        <div id="warmup-connecting">
+          <p id="warmup-message">Conectando con el servidor…</p>
+          <div class="warmup-timer">
+            <span id="warmup-seconds">0s</span>
+          </div>
+          <div class="warmup-progress" role="progressbar" aria-label="Cargando">
+            <div class="warmup-progress-bar"></div>
+          </div>
+          <p class="warmup-hint">La primera carga puede tardar hasta 1 minuto</p>
+        </div>
+
+        <!-- Phase 2: login form (shown after server ready) -->
+        <form id="login-form" class="modal__form" hidden>
           <label class="form-field">
             <span>Email</span>
             <input type="email" name="email" id="login-email" placeholder="usuario@refugios.local" required />
@@ -101,7 +122,7 @@
             <input type="password" name="password" id="login-password" required />
           </label>
           <div class="modal__actions" style="margin-top:1rem;">
-            <button type="submit" class="btn" id="warmup-enter-btn" disabled>Entrar al panel</button>
+            <button type="submit" class="btn btn--primary" id="warmup-enter-btn" disabled>Entrar al panel</button>
           </div>
           <p class="form-helper" id="login-error"></p>
         </form>

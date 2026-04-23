@@ -397,40 +397,117 @@ button {
   color: var(--ink-muted);
 }
 
+/* ── Warmup / cold-start overlay ──────────────────────────────────────── */
+
+@keyframes warmup-shimmer {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(200%); }
+}
+
+@keyframes warmup-fadein {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 .warmup-overlay {
   position: fixed;
   inset: 0;
-  background: var(--overlay-bg);
+  background: #080c14;
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 9999;
+  transition: opacity 0.45s ease;
 }
 
-/* Que el atributo [hidden] oculte el overlay aunque la clase use display:flex */
 .warmup-overlay[hidden] {
   display: none !important;
 }
 
+.warmup-overlay.is-fading {
+  opacity: 0;
+  pointer-events: none;
+}
+
 .warmup-card {
-  background: var(--bg-elevated);
+  background: #111827;
+  border: 1px solid rgba(255,255,255,0.07);
   color: var(--ink);
-  padding: 2rem;
-  border-radius: var(--radius-lg);
-  box-shadow: var(--overlay-shadow);
-  max-width: 380px;
-  width: 100%;
+  padding: 2.5rem 2rem;
+  border-radius: 20px;
+  box-shadow: 0 24px 60px rgba(0,0,0,0.6);
+  max-width: 360px;
+  width: calc(100% - 2rem);
   text-align: center;
+  animation: warmup-fadein 0.4s ease both;
+}
+
+.warmup-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 68px;
+  height: 68px;
+  border-radius: 18px;
+  background: rgba(224,123,39,0.12);
+  border: 1px solid rgba(224,123,39,0.25);
+  color: #e07b27;
+  margin-bottom: 1.25rem;
 }
 
 .warmup-card h1 {
-  margin: 0 0 0.5rem;
-  font-size: 1.4rem;
+  margin: 0 0 0.25rem;
+  font-size: 1.3rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
 }
 
-.warmup-card p {
+.warmup-card #warmup-message {
   margin: 0 0 1rem;
-  font-size: 0.95rem;
+  font-size: 0.9rem;
+  color: var(--ink-secondary);
+}
+
+.warmup-timer {
+  margin-bottom: 1rem;
+}
+
+#warmup-seconds {
+  display: inline-block;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #e07b27;
+  background: rgba(224,123,39,0.1);
+  border: 1px solid rgba(224,123,39,0.2);
+  padding: 0.2em 0.65em;
+  border-radius: 999px;
+  letter-spacing: 0.02em;
+}
+
+.warmup-progress {
+  height: 4px;
+  background: rgba(255,255,255,0.07);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-bottom: 1rem;
+}
+
+.warmup-progress-bar {
+  height: 100%;
+  width: 40%;
+  background: linear-gradient(90deg, transparent, #e07b27, transparent);
+  border-radius: 999px;
+  animation: warmup-shimmer 1.6s ease-in-out infinite;
+}
+
+.warmup-hint {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--ink-muted);
+}
+
+.warmup-card #warmup-message.is-error {
+  color: var(--danger);
 }
 
 #login-error {

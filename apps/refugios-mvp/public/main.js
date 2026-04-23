@@ -4377,113 +4377,133 @@ function renderVentasExcel(from, to, reservations) {
 }
 
 async function warmupAndStart() {
-  const overlay = document.getElementById("warmup-overlay");
-  const msgEl = document.getElementById("warmup-message");
-  const btn = document.getElementById("warmup-enter-btn");
-  const loginForm = document.getElementById("login-form");
-  const loginError = document.getElementById("login-error");
+  const overlay      = document.getElementById("warmup-overlay");
+  const msgEl        = document.getElementById("warmup-message");
+  const btn          = document.getElementById("warmup-enter-btn");
+  const loginForm    = document.getElementById("login-form");
+  const loginError   = document.getElementById("login-error");
+  const secondsEl    = document.getElementById("warmup-seconds");
+  const connectingEl = document.getElementById("warmup-connecting");
 
+  // Fallback: no overlay in DOM
   if (!overlay || !msgEl || !btn) {
-    // Fallback: arrancar normal
     setStatus("Cargando panel...");
     return loadAll()
       .then(() => {
         const stamp = new Date().toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" });
         setStatus(`Panel actualizado ${stamp}`, "ok");
       })
-      .catch((error) => {
-        console.error(error);
-        const message = `No se pudo cargar el panel: ${error.message}`;
-        setStatus(message, "error");
-      });
+      .catch((err) => setStatus(`No se pudo cargar el panel: ${err.message}`, "error"));
   }
 
+  // Show overlay and start seconds counter
   overlay.hidden = false;
-  msgEl.textContent = "Despertando servidor en Render…";
-  btn.disabled = true;
+  if (btn) btn.disabled = true;
 
-  const delays = [500, 1000, 1500, 2000, 3000, 5000, 8000, 12000];
-  let attempt = 0;
-  let ready = false;
-  let hardFailMessage = "";
+  let elapsedSeconds = 0;
+  const ticker = setInterval(() => {
+    elapsedSeconds++;
+    if (secondsEl) secondsEl.textContent = `${elapsedSeconds}s`;
+  }, 1000);
 
-  for (let i = 0; i < delays.length; i++) {
-    attempt = i + 1;
+  const TIMEOUT_MS  = 60_000;
+  const RETRY_MS    = 2_000;
+  const startedAt   = Date.now();
+  let ready         = false;
+  let hardFailMsg   = "";
+
+  // Poll /health every 2 seconds until ready or 60s timeout
+  while (Date.now() - startedAt < TIMEOUT_MS) {
     try {
-      const res = await fetch("/api/health/db", { method: "GET", cache: "no-store" });
+      const res = await fetch("/health", { method: "GET", cache: "no-store" });
       if (res.ok) {
+        ready = true;
+        break;
+      }
+      if (res.status === 503) {
         const data = await res.json().catch(() => ({}));
-        if (data.db === "ok" || data.db === true) {
-          ready = true;
-          break;
-        }
-      } else if (res.status === 503) {
-        const data = await res.json().catch(() => ({}));
-        const errorText = String(data?.error || "");
-        if (errorText.toLowerCase().includes("database_url")) {
-          hardFailMessage = "Servidor sin DATABASE_URL. Configura la variable y reinicia backend.";
+        if (String(data?.error || "").toLowerCase().includes("database_url")) {
+          hardFailMsg = "Error de configuración en el servidor. Contacta al administrador.";
           break;
         }
       }
     } catch {
-      // ignorar error y reintentar
+      // servidor aún dormido — reintentar
     }
-    msgEl.textContent = `Despertando servidor… (intento ${attempt})`;
-    await new Promise((r) => setTimeout(r, delays[i]));
+    await new Promise((r) => setTimeout(r, RETRY_MS));
   }
 
+  clearInterval(ticker);
+
+  // Timeout (60s) without connection
+  if (!ready && !hardFailMsg) {
+    hardFailMsg = "El servidor no respondió después de 60 segundos. Verifica que el servicio esté activo.";
+  }
+
+  // Hard failure
   if (!ready) {
-    msgEl.textContent = hardFailMessage || "No se pudo conectar al servidor. Reintenta en unos segundos.";
-    btn.disabled = false;
-    btn.textContent = "Reintentar";
-    btn.onclick = () => {
-      window.location.reload();
-    };
+    if (msgEl) { msgEl.textContent = hardFailMsg; msgEl.classList.add("is-error"); }
+    if (secondsEl) secondsEl.style.display = "none";
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = "Reintentar";
+      btn.onclick = () => window.location.reload();
+      if (loginForm) loginForm.hidden = false;
+    }
     return;
   }
 
-  msgEl.textContent = "Servidor listo. Ingresa tus credenciales para acceder.";
-  btn.disabled = false;
-  if (loginForm && loginError) {
-    loginForm.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      loginError.textContent = "";
-      btn.disabled = true;
-      btn.textContent = "Ingresando...";
-      try {
-        const formData = new FormData(loginForm);
-        const email = String(formData.get("email") || "");
-        const password = String(formData.get("password") || "");
-        const res = await fetch("/api/auth/login", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email, password })
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) {
-          throw new Error(data.error || `Error ${res.status}`);
-        }
-        const token = data.token || data.access_token || data.accessToken;
-        if (token) setAuthToken(token);
-        else {
-          loginError.textContent = "El servidor no devolvió sesión. Reintenta.";
-          btn.disabled = false;
-          btn.textContent = "Entrar al panel";
-          return;
-        }
-        overlay.hidden = true;
-        setStatus("Cargando panel...");
-        await loadAll();
-        const stamp = new Date().toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" });
-        setStatus(`Panel actualizado ${stamp}`, "ok");
-      } catch (error) {
-        console.error(error);
-        loginError.textContent = error.message || "No se pudo iniciar sesión";
+  // Server is up — show login form
+  if (msgEl) msgEl.textContent = "Servidor listo. Ingresa tus credenciales.";
+  if (connectingEl) {
+    // hide progress bar, keep seconds visible briefly
+    const bar = connectingEl.querySelector(".warmup-progress");
+    if (bar) bar.style.display = "none";
+  }
+  if (loginForm) loginForm.hidden = false;
+  if (btn) btn.disabled = false;
+
+  if (!loginForm || !loginError) return;
+
+  loginForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    loginError.textContent = "";
+    btn.disabled = true;
+    btn.textContent = "Ingresando...";
+    try {
+      const formData = new FormData(loginForm);
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: String(formData.get("email") || ""),
+          password: String(formData.get("password") || "")
+        })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
+      const token = data.token || data.access_token || data.accessToken;
+      if (!token) {
+        loginError.textContent = "El servidor no devolvió sesión. Reintenta.";
         btn.disabled = false;
         btn.textContent = "Entrar al panel";
+        return;
       }
-    });
-  }
+      setAuthToken(token);
+      // Fade out overlay before loading panel
+      overlay.classList.add("is-fading");
+      overlay.addEventListener("transitionend", () => { overlay.hidden = true; }, { once: true });
+      setStatus("Cargando panel...");
+      await loadAll();
+      const stamp = new Date().toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" });
+      setStatus(`Panel actualizado ${stamp}`, "ok");
+    } catch (err) {
+      console.error(err);
+      loginError.textContent = err.message || "No se pudo iniciar sesión";
+      btn.disabled = false;
+      btn.textContent = "Entrar al panel";
+    }
+  });
 }
 
 // ── UI helpers: confirm modal & toast ───────────────────────────────────────
