@@ -219,7 +219,7 @@ router.get("/", async (req, res, next) => {
     if (debtStatus && ["pending", "partial", "paid"].includes(debtStatus)) {
       where.push(
         `(CASE
-           WHEN COALESCE(sales_totals.paid_amount, 0) >= r.total_amount THEN 'paid'
+           WHEN COALESCE(sales_totals.paid_amount, 0) >= r.total_amount AND r.total_amount > 0 THEN 'paid'
            WHEN COALESCE(sales_totals.paid_amount, 0) > 0 THEN 'partial'
            ELSE 'pending'
          END) = ${addParam(debtStatus)}`
@@ -238,7 +238,7 @@ router.get("/", async (req, res, next) => {
            COALESCE(sales_totals.paid_amount, 0)::numeric(12,2) AS paid_amount,
            GREATEST(r.total_amount - COALESCE(sales_totals.paid_amount, 0), 0)::numeric(12,2) AS amount_due,
            CASE
-             WHEN COALESCE(sales_totals.paid_amount, 0) >= r.total_amount THEN 'paid'
+             WHEN COALESCE(sales_totals.paid_amount, 0) >= r.total_amount AND r.total_amount > 0 THEN 'paid'
              WHEN COALESCE(sales_totals.paid_amount, 0) > 0 THEN 'partial'
              ELSE 'pending'
            END AS debt_status
