@@ -4400,6 +4400,7 @@ async function warmupAndStart() {
   // Show overlay and start seconds counter
   overlay.hidden = false;
   if (btn) btn.disabled = true;
+  if (loginForm) loginForm.hidden = true;
 
   let elapsedSeconds = 0;
   const ticker = setInterval(() => {
