@@ -96,7 +96,7 @@
         <div id="warmup-connecting">
           <p id="warmup-message">Conectando con el servidor…</p>
           <div class="warmup-timer">
-            <span id="warmup-seconds">0s</span>
+            <span id="warmup-seconds"></span>
           </div>
           <div class="warmup-progress" role="progressbar" aria-label="Cargando">
             <div class="warmup-progress-bar"></div>
@@ -106,14 +106,31 @@
 
         <!-- Phase 2: login form (shown after server ready) -->
         <form id="login-form" class="modal__form" hidden>
-          <label class="form-field">
-            <span>Email</span>
-            <input type="email" name="email" id="login-email" placeholder="usuario@refugios.local" required />
-          </label>
-          <label class="form-field">
-            <span>Contraseña</span>
-            <input type="password" name="password" id="login-password" required />
-          </label>
+          <div class="form-field">
+            <label class="sr-only" for="login-email">Usuario</label>
+            <input
+              type="email"
+              name="email"
+              id="login-email"
+              placeholder="usuario@refugios.local"
+              autocomplete="username"
+              aria-describedby="login-email-under"
+              required
+            />
+            <div class="form-field__under" id="login-email-under">Usuario</div>
+          </div>
+          <div class="form-field">
+            <label class="sr-only" for="login-password">Contraseña</label>
+            <input
+              type="password"
+              name="password"
+              id="login-password"
+              autocomplete="current-password"
+              aria-describedby="login-password-under"
+              required
+            />
+            <div class="form-field__under" id="login-password-under">Contraseña</div>
+          </div>
           <div class="modal__actions" style="margin-top:1rem;">
             <button type="submit" class="btn btn--primary" id="warmup-enter-btn" disabled>Entrar al panel</button>
           </div>
@@ -472,6 +489,14 @@
           <div class="stat-card" id="ventas-kpi-airbnb-net-card" hidden>
             <span class="stat-card__number" id="ventas-kpi-airbnb-net">$0</span>
             <span class="stat-card__label">Neto Airbnb</span>
+          </div>
+          <div class="stat-card" id="ventas-kpi-web-card" hidden>
+            <span class="stat-card__number" id="ventas-kpi-web-commission">$0</span>
+            <span class="stat-card__label">Comisión Web (3%)</span>
+          </div>
+          <div class="stat-card" id="ventas-kpi-web-net-card" hidden>
+            <span class="stat-card__number" id="ventas-kpi-web-net">$0</span>
+            <span class="stat-card__label">Neto Web</span>
           </div>
         </div>
 
