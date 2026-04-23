@@ -1,5 +1,6 @@
 const money = new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 });
 const UI_VERSION = "0.9.7";
+const BACKEND_URL = (typeof window !== "undefined" && window.__BACKEND_URL) ? window.__BACKEND_URL.replace(/\/$/, "") : "";
 
 const paymentLabels = {
   transfer: "Transferencia",
@@ -515,7 +516,7 @@ async function api(path, options = {}) {
   const token = getAuthToken();
   if (token) headers.Authorization = `Bearer ${token}`;
 
-  const response = await fetch(path, {
+  const response = await fetch(BACKEND_URL + path, {
     ...options,
     headers
   });
@@ -4415,7 +4416,7 @@ async function warmupAndStart() {
   // Poll /health every 2 seconds until ready or 60s timeout
   while (Date.now() - startedAt < TIMEOUT_MS) {
     try {
-      const res = await fetch("/health", { method: "GET", cache: "no-store" });
+      const res = await fetch(BACKEND_URL + "/health", { method: "GET", cache: "no-store" });
       if (res.ok) {
         ready = true;
         break;
@@ -4472,7 +4473,7 @@ async function warmupAndStart() {
     btn.textContent = "Ingresando...";
     try {
       const formData = new FormData(loginForm);
-      const res = await fetch("/api/auth/login", {
+      const res = await fetch(BACKEND_URL + "/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
