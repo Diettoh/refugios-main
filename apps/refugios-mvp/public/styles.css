@@ -131,6 +131,12 @@ body.is-loading .main {
   transition: opacity 0.15s ease;
 }
 
+body.is-loading .main input,
+body.is-loading .main select,
+body.is-loading .main button {
+  cursor: not-allowed;
+}
+
 @keyframes loading-sweep {
   0%   { background-position: 200% 0; }
   100% { background-position: -200% 0; }
