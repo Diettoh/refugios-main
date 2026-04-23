@@ -19,8 +19,8 @@
 ## Current Position
 
 **Active Phase:** Phase 5 — Utilidad Neta / Abonos
-**Active Plan:** 05-01 complete (debt_status fix + migration 038)
-**Status:** Phase 5 Plan 1 complete — deployed to Render pending
+**Active Plan:** 05-02 in progress (Task 1 complete — awaiting Task 2 human-verify checkpoint)
+**Status:** Migrar pago button removed from UI — awaiting deploy + human verification
 
 **Progress Bar:**
 ```
@@ -104,9 +104,9 @@ High-priority items to keep in mind (not in scope for this milestone unless expl
 
 ## Session Continuity
 
-**Last session:** 2026-04-23 — Phase 05 Plan 01 executed: fixed debt_status CASE for total_amount=0, created migration 038 to delete 3 wrong migration abonos (sale IDs 1970, 2025, 2037).
+**Last session:** 2026-04-23 — Phase 05 Plan 02 Task 1 executed: removed "Migrar pago" button from reservation card UI (main.js line 2288). Committed 80efcba. Waiting at checkpoint:human-verify for deploy + production verification.
 
-**Next action:** Deploy rama `fix/billing-total-and-duplicate-records` to Render. Verify migration 038 applied in Render logs. Confirm reservations #2191, #2196, #2197 now show as 'pending' or 'partial', not 'paid'.
+**Next action:** Push branch fix/billing-total-and-duplicate-records to Render. Human verifies 9 checks at https://refugios.onrender.com (reservations #2191, #2196, #2197 show non-paid status; no Migrar pago button visible).
 
 **Rama activa en Render:** `fix/billing-total-and-duplicate-records` (13 commits adelante de main)
 
