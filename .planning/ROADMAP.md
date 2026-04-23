@@ -125,7 +125,7 @@ Plans:
 | 3. Dashboard Completo | 0/? | Not started | - |
 | 4. Utilidad Neta | 0/? | Blocked (fórmula pendiente) | - |
 | 5. Abonos | 1/2 | In progress | - |
-| 6. UX Polish — Ventas y Gastos | 0/1 | Planned | - |
+| 6. UX Polish — Ventas y Gastos | 1/1 | Complete   | 2026-04-23 |
 
 ---
 

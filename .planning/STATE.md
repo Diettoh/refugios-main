@@ -1,3 +1,16 @@
+---
+gsd_state_version: 1.0
+milestone: v0.10
+milestone_name: milestone
+status: verifying
+last_updated: "2026-04-23T14:31:22.414Z"
+progress:
+  total_phases: 6
+  completed_phases: 2
+  total_plans: 7
+  completed_plans: 6
+---
+
 # State: Refugios AvA
 
 **Project:** Refugios AvA — Plataforma de Administración
@@ -18,9 +31,9 @@
 
 ## Current Position
 
-**Active Phase:** Phase 5 — Utilidad Neta / Abonos
-**Active Plan:** 05-02 in progress (Task 1 complete — awaiting Task 2 human-verify checkpoint)
-**Status:** Migrar pago button removed from UI — awaiting deploy + human verification
+**Active Phase:** Phase 6 — UX Polish
+**Active Plan:** 06-01 COMPLETE
+**Status:** Phase 06 Plan 01 done (2 tasks, 2 commits). Ventas + Gastos default period fixes shipped to main.js. Ready to deploy.
 
 **Progress Bar:**
 ```
@@ -59,6 +72,7 @@ Notes:
 | Vanilla JS frontend — no bundler | Maintain consistency with existing SPA; avoid massive refactor | Pre-existing |
 | debt_status CASE must guard total_amount > 0 | 0 >= 0 is true in SQL — reservations with no total were incorrectly shown as 'paid' | 2026-04-23 |
 | Migration 038 uses safety guards on DELETE | category + description LIKE ensures no other records are accidentally deleted | 2026-04-23 |
+| No localStorage for period filter defaults | Current-session default (month) is sufficient; localStorage persistence deferred per CONTEXT.md | 2026-04-23 |
 
 ### Pending Decisions (blockers)
 
@@ -104,9 +118,9 @@ High-priority items to keep in mind (not in scope for this milestone unless expl
 
 ## Session Continuity
 
-**Last session:** 2026-04-23 — Phase 05 Plan 02 Task 1 executed: removed "Migrar pago" button from reservation card UI (main.js line 2288). Committed 80efcba. Waiting at checkpoint:human-verify for deploy + production verification.
+**Last session:** 2026-04-23 — Phase 06 Plan 01 complete. Fixed Ventas default period (year→month) and Gastos default filter month (empty→current). Commits 2f63158 + 25e22cb. Phase 06 Plan 01 SUMMARY.md created.
 
-**Next action:** Push branch fix/billing-total-and-duplicate-records to Render. Human verifies 9 checks at https://refugios.onrender.com (reservations #2191, #2196, #2197 show non-paid status; no Migrar pago button visible).
+**Next action:** Push branch to Render. Deploy and verify Ventas opens on current month and Gastos month filter pre-fills correctly at https://refugios.onrender.com.
 
 **Rama activa en Render:** `fix/billing-total-and-duplicate-records` (13 commits adelante de main)
 
