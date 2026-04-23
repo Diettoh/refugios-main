@@ -18,9 +18,9 @@
 
 ## Current Position
 
-**Active Phase:** Phase 4 — Dashboard Completo
-**Active Plan:** UI alignment to client PDFs
-**Status:** In progress (UI v0.9.6 deployed · RESERVAS 2026 reconciled)
+**Active Phase:** Phase 5 — Utilidad Neta / Abonos
+**Active Plan:** 05-01 complete (debt_status fix + migration 038)
+**Status:** Phase 5 Plan 1 complete — deployed to Render pending
 
 **Progress Bar:**
 ```
@@ -57,6 +57,8 @@ Notes:
 | Utilidad formula must be confirmed before Phase 5 | Excel shows TOTAL vs UTILIDAD delta; unclear if Booking commission, fixed costs, or both | 2026-03-16 |
 | Migration via script (not UI) | 2 years of data; manual entry is not viable | Pre-existing |
 | Vanilla JS frontend — no bundler | Maintain consistency with existing SPA; avoid massive refactor | Pre-existing |
+| debt_status CASE must guard total_amount > 0 | 0 >= 0 is true in SQL — reservations with no total were incorrectly shown as 'paid' | 2026-04-23 |
+| Migration 038 uses safety guards on DELETE | category + description LIKE ensures no other records are accidentally deleted | 2026-04-23 |
 
 ### Pending Decisions (blockers)
 
@@ -102,9 +104,9 @@ High-priority items to keep in mind (not in scope for this milestone unless expl
 
 ## Session Continuity
 
-**Last session:** 2026-03-17 — UI `v0.9.6` deployed; RESERVAS 2026 imported and reconciled; prod cleaned of non-client test data.
+**Last session:** 2026-04-23 — Phase 05 Plan 01 executed: fixed debt_status CASE for total_amount=0, created migration 038 to delete 3 wrong migration abonos (sale IDs 1970, 2025, 2037).
 
-**Next action:** Revisar implementación de abonos en rama `fix/billing-total-and-duplicate-records`, agregar tests y coordinar merge. Rama es la que está desplegada en Render — NO hacer merge a main hasta validar con Germán en prod.
+**Next action:** Deploy rama `fix/billing-total-and-duplicate-records` to Render. Verify migration 038 applied in Render logs. Confirm reservations #2191, #2196, #2197 now show as 'pending' or 'partial', not 'paid'.
 
 **Rama activa en Render:** `fix/billing-total-and-duplicate-records` (13 commits adelante de main)
 

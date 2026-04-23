@@ -96,7 +96,7 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 05-01-PLAN.md — Wave 1: backend fix (debt_status SQL) + data cleanup migration 038
+- [x] 05-01-PLAN.md — Wave 1: backend fix (debt_status SQL) + data cleanup migration 038
 - [ ] 05-02-PLAN.md — Wave 2: frontend fix (remove Migrar pago button) + human verification
 
 ---
@@ -109,7 +109,7 @@ Plans:
 | 2. Campos de Reserva | 4/4 | Completed | 2026-03-16 |
 | 3. Dashboard Completo | 0/? | Not started | - |
 | 4. Utilidad Neta | 0/? | Blocked (fórmula pendiente) | - |
-| 5. Abonos | 0/2 | Planned | - |
+| 5. Abonos | 1/2 | In progress | - |
 
 ---
 
