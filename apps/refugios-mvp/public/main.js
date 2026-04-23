@@ -110,7 +110,7 @@ const state = {
   calendarGuestQuery: window.localStorage.getItem("calendar_guest_query") || "",
   salesPeriodBy: "check_in",
   totalCabins: Number(localStorage.getItem("total_cabins") || 6),
-  expensesFilterMonth: "",
+  expensesFilterMonth: new Date().toISOString().slice(0, 7),
   expensesFilterPayment: "",
   expensesFilterCategory: "",
   expensesFilterSupplier: "",
@@ -3377,6 +3377,7 @@ function bindExpensesFilters() {
   const minAmount = document.getElementById("expenses-filter-min-amount");
   const maxAmount = document.getElementById("expenses-filter-max-amount");
   const text = document.getElementById("expenses-filter-text");
+  if (month) month.value = state.expensesFilterMonth;
   if (month) {
     month.addEventListener("change", async () => {
       state.expensesFilterMonth = String(month.value || "").trim();
