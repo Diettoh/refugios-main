@@ -126,8 +126,8 @@ const state = {
   reservationsFilterSource: "",
   reservationsFilterDebt: "",
   reservationsFilterName: "",
-  reservationsFilterCheckInFrom: "",
-  reservationsFilterCheckInTo: "",
+  reservationsFilterCheckInFrom: (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-01`; })(),
+  reservationsFilterCheckInTo: (() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth()+1, 0).toISOString().slice(0,10); })(),
   reservationsFilterCheckOutFrom: "",
   reservationsFilterCheckOutTo: "",
   reservationsFilterMinNights: "",
@@ -3508,6 +3508,7 @@ function bindReservationsFilters() {
   }
 
   if (checkInFrom) {
+    checkInFrom.value = state.reservationsFilterCheckInFrom;
     checkInFrom.addEventListener("change", async () => {
       state.reservationsFilterCheckInFrom = checkInFrom.value || "";
       await loadAll();
@@ -3515,6 +3516,7 @@ function bindReservationsFilters() {
   }
 
   if (checkInTo) {
+    checkInTo.value = state.reservationsFilterCheckInTo;
     checkInTo.addEventListener("change", async () => {
       state.reservationsFilterCheckInTo = checkInTo.value || "";
       await loadAll();
