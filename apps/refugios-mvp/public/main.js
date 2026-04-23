@@ -2877,6 +2877,22 @@ function bindReservationPricing() {
   checkOutInput.addEventListener("change", recomputeNights);
   additionalChargeInput?.addEventListener("input", updateSuggestedTotal);
   additionalChargeInput?.addEventListener("change", updateSuggestedTotal);
+
+  const cabinSelectEl = document.getElementById("reservation-cabin");
+  if (cabinSelectEl) {
+    cabinSelectEl.addEventListener("change", () => {
+      if (nightlyRateInput.value.trim() !== "") return;
+      const cabinId = Number(cabinSelectEl.value);
+      if (!cabinId) return;
+      const cabin = (state.cabins || []).find((c) => Number(c.id) === cabinId);
+      const rate = Number(cabin?.nightly_rate || 0);
+      if (rate > 0) {
+        nightlyRateInput.value = String(rate);
+        nightlyRateInput.dispatchEvent(new Event("input"));
+      }
+    });
+  }
+
   updateSuggestedTotal();
 }
 
