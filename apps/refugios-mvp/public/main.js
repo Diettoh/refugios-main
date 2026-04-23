@@ -2589,7 +2589,29 @@ function resetReservationForm() {
   const statusRow = form.querySelector("#reservation-status-row");
   if (statusRow) statusRow.hidden = true;
 
+  const nightlyRateHint = document.getElementById("nightly-rate-hint");
+  if (nightlyRateHint) nightlyRateHint.hidden = true;
+
   setReservationGuestStatus("Ingresa RUT para buscar huésped.");
+}
+
+function getSuggestedNightlyRate(reservation, cabin) {
+  const saved = Number(reservation.nightly_rate);
+  if (Number.isFinite(saved) && saved > 0) return { rate: saved, isSuggested: false };
+
+  const total = Number(reservation.total_amount);
+  const nights = Number(reservation.nights);
+  const extra = Number(reservation.additional_charge || 0);
+  if (total > 0 && nights > 0) {
+    const safeExtra = extra > 0 && extra < total ? extra : 0;
+    const base = total - safeExtra;
+    if (base > 0) return { rate: Math.round(base / nights), isSuggested: true };
+  }
+
+  const cabinRate = Number(cabin?.nightly_rate);
+  if (Number.isFinite(cabinRate) && cabinRate > 0) return { rate: cabinRate, isSuggested: true };
+
+  return { rate: null, isSuggested: false };
 }
 
 function openReservationEditor(reservationId) {
@@ -2625,7 +2647,15 @@ function openReservationEditor(reservationId) {
   setFieldValue('[name="guest_phone"]', guest?.phone || "");
   setFieldValue('[name="channel_payment"]', getChannelPaymentValue(reservation.source, reservation.payment_method));
   setFieldValue('[name="cabin_id"]', String(reservation.cabin_id || ""));
-  setFieldValue('[name="nightly_rate"]', String(reservation.nightly_rate ?? ""));
+  const _editCabin = (state.cabins || []).find((c) => Number(c.id) === Number(reservation.cabin_id));
+  const { rate: _suggestedRate, isSuggested: _rateIsSuggested } = getSuggestedNightlyRate(reservation, _editCabin);
+  const _nightlyRateInput = form.querySelector('input[name="nightly_rate"]');
+  const _nightlyRateHint = document.getElementById("nightly-rate-hint");
+  if (_nightlyRateInput) {
+    _nightlyRateInput.value = _suggestedRate != null ? String(_suggestedRate) : "";
+    if (_suggestedRate != null) _nightlyRateInput.dispatchEvent(new Event("input"));
+  }
+  if (_nightlyRateHint) _nightlyRateHint.hidden = !_rateIsSuggested;
   setFieldValue('[name="check_in"]', toDateKey(reservation.check_in) || "");
   setFieldValue('[name="check_out"]', toDateKey(reservation.check_out) || "");
   setFieldValue('[name="check_in_time"]', reservation.check_in_time ? String(reservation.check_in_time).slice(0, 5) : "");
@@ -2862,6 +2892,10 @@ function bindReservationPricing() {
   nightsInput.addEventListener("change", updateSuggestedTotal);
   nightlyRateInput.addEventListener("input", updateSuggestedTotal);
   nightlyRateInput.addEventListener("change", updateSuggestedTotal);
+  nightlyRateInput.addEventListener("input", () => {
+    const hint = document.getElementById("nightly-rate-hint");
+    if (hint) hint.hidden = true;
+  });
   totalAmountInput.addEventListener("input", () => {
     const currentTotalValue = String(totalAmountInput.value || "").trim();
     totalEditedManually = currentTotalValue !== "" && currentTotalValue !== (totalAmountInput.dataset.lastSuggestedTotal || "");
