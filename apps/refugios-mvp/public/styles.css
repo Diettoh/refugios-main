@@ -118,11 +118,17 @@ body.is-loading::before {
   top: 0;
   left: 0;
   right: 0;
-  height: 2px;
+  height: 3px;
   background: linear-gradient(90deg, var(--accent) 0%, rgba(52, 211, 153, 0.4) 50%, var(--accent) 100%);
   background-size: 200% 100%;
   animation: loading-sweep 1s linear infinite;
   z-index: 9999;
+}
+
+body.is-loading .main {
+  opacity: 0.55;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
 }
 
 @keyframes loading-sweep {
