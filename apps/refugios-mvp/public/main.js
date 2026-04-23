@@ -3872,7 +3872,7 @@ function setupSalesSection() {
   monthSelect.value = String(currentMonth).padStart(2, "0");
   quarterSelect.value = String(Math.ceil(currentMonth / 3));
   semesterSelect.value = currentMonth <= 6 ? "1" : "2";
-  if (periodType) periodType.value = "year";
+  if (periodType) periodType.value = "month";
 
   function updatePeriodVisibility() {
     const type = periodType?.value || "month";
