@@ -2285,7 +2285,6 @@ async function loadAll() {
       <div id="payment-history-${row.id}" class="payment-history" hidden></div>
       <div class="record-actions">
         ${row.debt_status !== "paid" ? `<button type="button" class="btn btn--sm btn--primary" onclick="openSaleModalForReservation(${row.id}, ${Number(row.amount_due || 0)}, '${(row.guest_name || "").replace(/'/g, "\\'")}')">Abonar</button>` : ""}
-        ${row.paid_amount == 0 && Number(row.total_amount) > 0 ? `<button type="button" class="btn btn--sm btn--ghost" onclick="migrateReservationPayment(${row.id}, '${(row.guest_name || "").replace(/'/g, "\\'")}')" title="Marcar como pagada (reserva antigua)">Migrar pago</button>` : ""}
         <button type="button" class="btn btn--sm btn--ghost btn-change-guest" data-reservation-id="${row.id}" title="Cambiar huésped vinculado">Huésped</button>
         <button type="button" class="btn btn--sm btn--ghost btn-change-cabin" data-reservation-id="${row.id}" title="Cambiar cabaña asignada">Cabaña</button>
         <button type="button" class="btn btn--sm btn--ghost btn-edit-reservation" data-reservation-id="${row.id}">Editar</button>
