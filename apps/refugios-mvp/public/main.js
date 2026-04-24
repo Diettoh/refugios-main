@@ -2836,6 +2836,7 @@ function bindReservationPricing() {
   const checkOutInput = form.querySelector('input[name="check_out"]');
   const nightsInput = document.getElementById("reservation-nights");
   const nightlyRateInput = document.getElementById("reservation-nightly-rate");
+  const cleaningSupplementInput = document.getElementById("reservation-cleaning-supplement");
   const totalAmountInput = form.querySelector('input[name="total_amount"]');
   const additionalChargeInput = form.querySelector('input[name="additional_charge"]');
   const totalSuggestion = document.getElementById("reservation-total-suggestion");
@@ -2860,9 +2861,10 @@ function bindReservationPricing() {
     if (channelPayment === "airbnb") commissionRate = AIRBNB_COMMISSION_RATE;
     if (channelPayment === "web") commissionRate = WEB_COMMISSION_RATE;
 
+    const cleaning = Math.max(0, Number(cleaningSupplementInput?.value || 0));
     const additionalCharge = Math.max(0, Number(additionalChargeInput?.value || 0));
     const baseTotal = Math.round(nights * nightlyRate);
-    const grossTotal = baseTotal + additionalCharge;
+    const grossTotal = baseTotal + cleaning + additionalCharge;
     const suggestedTotal = commissionRate > 0 ? Math.round(grossTotal * (1 - commissionRate)) : grossTotal;
 
     let suggestionText = "";
@@ -2870,9 +2872,10 @@ function bindReservationPricing() {
       const commissionAmount = Math.round(grossTotal * commissionRate);
       suggestionText = `Sugerencia: ${formatMoneyValue(suggestedTotal)} (Neto tras comisión de ${formatMoneyValue(commissionAmount)} - ${(commissionRate * 100).toFixed(1)}%). Bruto: ${formatMoneyValue(grossTotal)}.`;
     } else {
-      suggestionText = additionalCharge > 0
-        ? `Sugerencia: ${formatMoneyValue(suggestedTotal)} (${nights} noches x ${formatMoneyValue(nightlyRate)} + adicional ${formatMoneyValue(additionalCharge)}).`
-        : `Sugerencia: ${formatMoneyValue(suggestedTotal)} (${nights} noches x ${formatMoneyValue(nightlyRate)}).`;
+      const parts = [`${nights} noches x ${formatMoneyValue(nightlyRate)}`];
+      if (cleaning > 0) parts.push(`limpieza ${formatMoneyValue(cleaning)}`);
+      if (additionalCharge > 0) parts.push(`adicional ${formatMoneyValue(additionalCharge)}`);
+      suggestionText = `Sugerencia: ${formatMoneyValue(suggestedTotal)} (${parts.join(" + ")}).`;
     }
     totalSuggestion.textContent = suggestionText;
 
@@ -2923,6 +2926,8 @@ function bindReservationPricing() {
   checkOutInput.addEventListener("change", recomputeNights);
   additionalChargeInput?.addEventListener("input", updateSuggestedTotal);
   additionalChargeInput?.addEventListener("change", updateSuggestedTotal);
+  cleaningSupplementInput?.addEventListener("input", updateSuggestedTotal);
+  cleaningSupplementInput?.addEventListener("change", updateSuggestedTotal);
 
   const cabinSelectEl = document.getElementById("reservation-cabin");
   if (cabinSelectEl) {
