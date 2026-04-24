@@ -42,7 +42,7 @@ const channelPaymentToReservation = {
 const AIRBNB_COMMISSION_RATE = 0.03;
 // Comisión del canal "web" (página). Por defecto 3% (tipo Transbank).
 // Nota: puede variar por contrato/medio de pago; ajustar cuando se confirme el % real.
-const WEB_COMMISSION_RATE = 0.03;
+const WEB_COMMISSION_RATE = 0.028;
 
 function formatChannelPaymentLabel(source, paymentMethod) {
   const src = String(source || "").toLowerCase();
@@ -867,8 +867,6 @@ function applyReservationsFilters(rows) {
     const checkIn = toDateKey(row.check_in);
     const checkOut = toDateKey(row.check_out);
     if (state.reservationsFilterCheckInFrom && checkIn && checkIn < state.reservationsFilterCheckInFrom) return false;
-    if (state.reservationsFilterCheckInTo && checkIn && checkIn > state.reservationsFilterCheckInTo) return false;
-    if (state.reservationsFilterCheckOutFrom && checkOut && checkOut < state.reservationsFilterCheckOutFrom) return false;
     if (state.reservationsFilterCheckOutTo && checkOut && checkOut > state.reservationsFilterCheckOutTo) return false;
 
     const nights = Number(row.nights);
@@ -2274,16 +2272,6 @@ async function loadAll() {
         ${row.nights != null ? chip(`${row.nights} noche${Number(row.nights) === 1 ? "" : "s"}`) : ""}
         ${(() => {
           const total = Number(row.total_amount);
-          if (row.source === "airbnb" && total > 0) {
-            const commission = Math.round(total * AIRBNB_COMMISSION_RATE);
-            const net = total - commission;
-            return chip(`Comisión -${money.format(commission)}`, "badge--ghost") + chip(`Neto ${money.format(net)}`, "badge--info");
-          }
-          if (row.source === "web" && total > 0) {
-            const commission = Math.round(total * WEB_COMMISSION_RATE);
-            const net = total - commission;
-            return chip(`Comisión -${money.format(commission)}`, "badge--ghost") + chip(`Neto ${money.format(net)}`, "badge--info");
-          }
           return total === 0
             ? chip("Sin monto — editar", "debt-pending")
             : chip(`Total ${money.format(row.total_amount)}`);
@@ -2867,12 +2855,25 @@ function bindReservationPricing() {
       return;
     }
 
+    const channelPayment = form.querySelector('select[name="channel_payment"]')?.value;
+    let commissionRate = 0;
+    if (channelPayment === "airbnb") commissionRate = AIRBNB_COMMISSION_RATE;
+    if (channelPayment === "web") commissionRate = WEB_COMMISSION_RATE;
+
     const additionalCharge = Math.max(0, Number(additionalChargeInput?.value || 0));
     const baseTotal = Math.round(nights * nightlyRate);
-    const suggestedTotal = baseTotal + additionalCharge;
-    const suggestionText = additionalCharge > 0
-      ? `Sugerencia: ${formatMoneyValue(suggestedTotal)} (${nights} noches x ${formatMoneyValue(nightlyRate)} + adicional ${formatMoneyValue(additionalCharge)}).`
-      : `Sugerencia: ${formatMoneyValue(suggestedTotal)} (${nights} noches x ${formatMoneyValue(nightlyRate)}).`;
+    const grossTotal = baseTotal + additionalCharge;
+    const suggestedTotal = commissionRate > 0 ? Math.round(grossTotal * (1 - commissionRate)) : grossTotal;
+
+    let suggestionText = "";
+    if (commissionRate > 0) {
+      const commissionAmount = Math.round(grossTotal * commissionRate);
+      suggestionText = `Sugerencia: ${formatMoneyValue(suggestedTotal)} (Neto tras comisión de ${formatMoneyValue(commissionAmount)} - ${(commissionRate * 100).toFixed(1)}%). Bruto: ${formatMoneyValue(grossTotal)}.`;
+    } else {
+      suggestionText = additionalCharge > 0
+        ? `Sugerencia: ${formatMoneyValue(suggestedTotal)} (${nights} noches x ${formatMoneyValue(nightlyRate)} + adicional ${formatMoneyValue(additionalCharge)}).`
+        : `Sugerencia: ${formatMoneyValue(suggestedTotal)} (${nights} noches x ${formatMoneyValue(nightlyRate)}).`;
+    }
     totalSuggestion.textContent = suggestionText;
 
     const previousSuggestedTotal = totalAmountInput.dataset.lastSuggestedTotal || "";
@@ -2907,6 +2908,7 @@ function bindReservationPricing() {
     const hint = document.getElementById("nightly-rate-hint");
     if (hint) hint.hidden = true;
   });
+  form.querySelector('select[name="channel_payment"]')?.addEventListener("change", updateSuggestedTotal);
   totalAmountInput.addEventListener("input", () => {
     const currentTotalValue = String(totalAmountInput.value || "").trim();
     totalEditedManually = currentTotalValue !== "" && currentTotalValue !== (totalAmountInput.dataset.lastSuggestedTotal || "");
@@ -3491,8 +3493,6 @@ function bindReservationsFilters() {
   const debt = document.getElementById("reservations-filter-debt");
   const name = document.getElementById("reservations-filter-name");
   const checkInFrom = document.getElementById("reservations-filter-check-in-from");
-  const checkInTo = document.getElementById("reservations-filter-check-in-to");
-  const checkOutFrom = document.getElementById("reservations-filter-check-out-from");
   const checkOutTo = document.getElementById("reservations-filter-check-out-to");
   const minNights = document.getElementById("reservations-filter-min-nights");
   const maxNights = document.getElementById("reservations-filter-max-nights");
@@ -3523,21 +3523,6 @@ function bindReservationsFilters() {
     checkInFrom.value = state.reservationsFilterCheckInFrom;
     checkInFrom.addEventListener("change", async () => {
       state.reservationsFilterCheckInFrom = checkInFrom.value || "";
-      await loadAll();
-    });
-  }
-
-  if (checkInTo) {
-    checkInTo.value = state.reservationsFilterCheckInTo;
-    checkInTo.addEventListener("change", async () => {
-      state.reservationsFilterCheckInTo = checkInTo.value || "";
-      await loadAll();
-    });
-  }
-
-  if (checkOutFrom) {
-    checkOutFrom.addEventListener("change", async () => {
-      state.reservationsFilterCheckOutFrom = checkOutFrom.value || "";
       await loadAll();
     });
   }
@@ -4089,40 +4074,31 @@ function renderMonthlyTables(from, to, sales, expenses) {
   const totalSales = sales.reduce((acc, row) => acc + Number(row.amount || 0), 0);
   const salesTotalEl = document.getElementById("ventas-kpi-sales-total");
   const salesCountEl = document.getElementById("ventas-kpi-sales-count");
+  const reservationsCountEl = document.getElementById("ventas-kpi-reservations-count");
+
   if (salesTotalEl) salesTotalEl.textContent = money.format(totalSales);
   if (salesCountEl) salesCountEl.textContent = String(sales.length);
 
-  // Airbnb commission KPIs (3% of lodging amount from Airbnb reservations)
-  const airbnbLodging = sales
-    .filter(r => r.reservation_source === "airbnb" && r.category === "lodging")
-    .reduce((acc, r) => acc + Number(r.amount || 0), 0);
-  const airbnbCommission = Math.round(airbnbLodging * AIRBNB_COMMISSION_RATE);
-  const airbnbNet = airbnbLodging - airbnbCommission;
+  if (reservationsCountEl) {
+    const uniqueResIds = new Set(
+      sales
+        .filter((r) => r.reservation_id != null)
+        .map((r) => r.reservation_id)
+    );
+    reservationsCountEl.textContent = String(uniqueResIds.size);
+  }
+
+  // Airbnb commission KPIs - Omitted as we now handle net amounts at reservation level
   const airbnbCard = document.getElementById("ventas-kpi-airbnb-card");
   const airbnbNetCard = document.getElementById("ventas-kpi-airbnb-net-card");
-  const airbnbCommissionEl = document.getElementById("ventas-kpi-airbnb-commission");
-  const airbnbNetEl = document.getElementById("ventas-kpi-airbnb-net");
-  const hasAirbnb = airbnbLodging > 0;
-  if (airbnbCard) airbnbCard.hidden = !hasAirbnb;
-  if (airbnbNetCard) airbnbNetCard.hidden = !hasAirbnb;
-  if (airbnbCommissionEl) airbnbCommissionEl.textContent = money.format(airbnbCommission);
-  if (airbnbNetEl) airbnbNetEl.textContent = money.format(airbnbNet);
+  if (airbnbCard) airbnbCard.hidden = true;
+  if (airbnbNetCard) airbnbNetCard.hidden = true;
 
-  // Web commission KPIs (commission on lodging amount from web reservations)
-  const webLodging = sales
-    .filter(r => r.reservation_source === "web" && r.category === "lodging")
-    .reduce((acc, r) => acc + Number(r.amount || 0), 0);
-  const webCommission = Math.round(webLodging * WEB_COMMISSION_RATE);
-  const webNet = webLodging - webCommission;
+  // Web commission KPIs - Omitted as we now handle net amounts at reservation level
   const webCard = document.getElementById("ventas-kpi-web-card");
   const webNetCard = document.getElementById("ventas-kpi-web-net-card");
-  const webCommissionEl = document.getElementById("ventas-kpi-web-commission");
-  const webNetEl = document.getElementById("ventas-kpi-web-net");
-  const hasWeb = webLodging > 0;
-  if (webCard) webCard.hidden = !hasWeb;
-  if (webNetCard) webNetCard.hidden = !hasWeb;
-  if (webCommissionEl) webCommissionEl.textContent = money.format(webCommission);
-  if (webNetEl) webNetEl.textContent = money.format(webNet);
+  if (webCard) webCard.hidden = true;
+  if (webNetCard) webNetCard.hidden = true;
 
   const cabinById = new Map((state.cabins || []).map((c) => [Number(c.id), c]));
   const summary = {
@@ -4248,7 +4224,7 @@ function renderMonthlyTables(from, to, sales, expenses) {
       <td></td>
       <td colspan="6" style="padding-left:2rem; font-size:0.82em; color: var(--color-text-muted, #888); border-top:none;">
         <span style="border-left: 3px solid #0ea5e9; padding-left: 0.5rem;">
-          🌐 <em>Comisión Web (3%)</em>
+          🌐 <em>Comisión Web (2.8%)</em>
         </span>
       </td>
       <td><strong style="color:#0ea5e9;">-${money.format(commission)}</strong> <span style="font-size:0.8em; color:gray;">→ Neto ${money.format(net)}</span></td>
@@ -4262,12 +4238,7 @@ function renderMonthlyTables(from, to, sales, expenses) {
     const main = group.find(r => r.category === "lodging") || group[0];
     const subs = group.filter(r => r !== main && (r.category === "suplemento" || r.category === "abono"));
     rowsHtml.push(buildMainRow(main));
-    if (main.category === "lodging" && main.reservation_source === "airbnb" && Number(main.amount) > 0) {
-      rowsHtml.push(buildAirbnbCommissionRow(Number(main.amount)));
-    }
-    if (main.category === "lodging" && main.reservation_source === "web" && Number(main.amount) > 0) {
-      rowsHtml.push(buildWebCommissionRow(Number(main.amount)));
-    }
+    // Commission rows removed: net amounts are now handled at reservation source level
     for (const sub of subs) rowsHtml.push(buildSubRow(sub));
     // ventas manuales sin categoría lodging/suplemento/abono en el mismo grupo
     for (const other of group.filter(r => r !== main && r.category !== "suplemento" && r.category !== "abono")) {
