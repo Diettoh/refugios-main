@@ -95,7 +95,7 @@ async function syncReservationSales({
       [reservationId, category]
     );
 
-    if (amount <= 0) {
+    if (amount <= 0 && category !== "lodging") {
       if (existing.rowCount > 0) {
         await query("DELETE FROM sales WHERE id = $1", [existing.rows[0].id]);
       }
