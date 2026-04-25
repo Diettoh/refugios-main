@@ -1054,8 +1054,32 @@ h2.section__title {
 .calendar-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 0.5rem;
+  flex-wrap: wrap;
   margin-bottom: 0.75rem;
+}
+
+.calendar-search {
+  display: flex;
+  align-items: center;
+  min-width: 10rem;
+  flex: 1 1 12rem;
+  max-width: 16rem;
+}
+
+.calendar-search input {
+  width: 100%;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
+  color: var(--ink);
+  font-size: 0.82rem;
+}
+
+.calendar-search input:focus {
+  outline: none;
+  border-color: var(--accent);
 }
 
 .calendar-title {
@@ -1432,6 +1456,15 @@ h2.section__title {
 .calendar-flag.is-out {
   background: rgba(0, 0, 0, 0.18);
   color: inherit;
+}
+
+.calendar-grid.is-filtering .calendar-guest-row.is-dim {
+  opacity: 0.22;
+  filter: saturate(0.72);
+}
+
+.calendar-grid.is-filtering .calendar-guest-row.is-match {
+  box-shadow: inset 0 0 0 1px rgba(96, 165, 250, 0.92);
 }
 
 .calendar-guest-row.is-turnover {
@@ -2375,6 +2408,18 @@ h2.section__title {
 /* ============================================================
    FORM FIELDS
    ============================================================ */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .form-field {
   display: flex;
   flex-direction: column;
@@ -2387,6 +2432,13 @@ h2.section__title {
   font-size: 0.75rem;
   font-weight: 600;
   color: var(--ink-secondary);
+}
+
+.form-field__under {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--ink-secondary);
+  margin-top: 0.1rem;
 }
 
 .form-field input,
