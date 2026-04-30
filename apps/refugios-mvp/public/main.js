@@ -276,6 +276,8 @@ function setupFocusMode() {
   const breadcrumbCurrent = document.querySelector(".breadcrumb__current");
   const DEFAULT_PANEL = "#section-availability";
 
+  const validPanelIds = new Set(panels.map((p) => `#${p.id}`));
+
   const setActivePanel = (id) => {
     panels.forEach((panel) => panel.classList.toggle("is-active", `#${panel.id}` === id));
     navLinks.forEach((link) => link.classList.toggle("is-active", link.getAttribute("href") === id));
@@ -283,11 +285,15 @@ function setupFocusMode() {
       const activeLink = navLinks.find((link) => link.getAttribute("href") === id);
       breadcrumbCurrent.textContent = activeLink?.textContent?.trim() || "Panel";
     }
+    localStorage.setItem("last_panel", id);
     window.scrollTo({ top: 0 });
   };
 
+  const savedPanel = localStorage.getItem("last_panel");
+  const initialPanel = savedPanel && validPanelIds.has(savedPanel) ? savedPanel : DEFAULT_PANEL;
+
   document.body.classList.add("focus-mode");
-  setActivePanel(DEFAULT_PANEL);
+  setActivePanel(initialPanel);
 
   navLinks.forEach((link) => {
     link.addEventListener("click", (event) => {
