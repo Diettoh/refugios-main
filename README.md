@@ -61,7 +61,7 @@ El proyecto generado incluye `DEPLOY.md` con pasos por proveedor.
 - Web (Render): `https://refugios.onrender.com/`
 
 ## Versionado UI
-- `UI_VERSION` actual: `0.8.4`
+- `UI_VERSION` actual: `0.9.8`
 - Ubicacion en codigo: `apps/refugios-mvp/public/main.js`
 - Indicador visible en UI: footer (`#ui-version`).
 

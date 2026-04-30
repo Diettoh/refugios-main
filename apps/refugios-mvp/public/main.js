@@ -134,8 +134,8 @@ const state = {
   reservationsFilterName: "",
   reservationsFilterCheckInFrom: (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-01`; })(),
   reservationsFilterCheckInTo: (() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth()+1, 0).toISOString().slice(0,10); })(),
-  reservationsFilterCheckOutFrom: "",
-  reservationsFilterCheckOutTo: "",
+  reservationsFilterCheckInFrom: "",
+  reservationsFilterCheckInTo: "",
   reservationsFilterMinNights: "",
   reservationsFilterMaxNights: "",
   reservationsFilterDocType: "",
@@ -4076,12 +4076,18 @@ function renderMonthlyTables(from, to, sales, expenses) {
   if (!salesBody) return;
   sales = Array.isArray(sales) ? sales : [];
 
-  const totalSales = sales.reduce((acc, row) => acc + Number(row.amount || 0), 0);
+  const totalLodging = sales.filter((r) => r.category === "lodging").reduce((acc, row) => acc + Number(row.amount || 0), 0);
+  const totalAbonado = sales.filter((r) => r.category === "abono").reduce((acc, row) => acc + Number(row.amount || 0), 0);
+  const totalPorRecibir = Math.max(0, totalLodging - totalAbonado);
   const salesTotalEl = document.getElementById("ventas-kpi-sales-total");
+  const abonadoEl = document.getElementById("ventas-kpi-abonado");
+  const porRecibirEl = document.getElementById("ventas-kpi-por-recibir");
   const salesCountEl = document.getElementById("ventas-kpi-sales-count");
   const reservationsCountEl = document.getElementById("ventas-kpi-reservations-count");
 
-  if (salesTotalEl) salesTotalEl.textContent = money.format(totalSales);
+  if (salesTotalEl) salesTotalEl.textContent = money.format(totalLodging);
+  if (abonadoEl) abonadoEl.textContent = money.format(totalAbonado);
+  if (porRecibirEl) porRecibirEl.textContent = money.format(totalPorRecibir);
   if (salesCountEl) salesCountEl.textContent = String(sales.length);
 
   if (reservationsCountEl) {
