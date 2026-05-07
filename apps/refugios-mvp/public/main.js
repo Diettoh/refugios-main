@@ -114,7 +114,7 @@ const state = {
   calendarView: window.localStorage.getItem("calendar_view") || "panel",
   calendarWeekStart: null,
   calendarGuestQuery: window.localStorage.getItem("calendar_guest_query") || "",
-  salesPeriodBy: "check_in",
+  salesPeriodBy: "sale_date",
   totalCabins: Number(localStorage.getItem("total_cabins") || 6),
   expensesFilterMonth: new Date().toISOString().slice(0, 7),
   expensesFilterPayment: "",
@@ -873,6 +873,7 @@ function applyReservationsFilters(rows) {
     const checkIn = toDateKey(row.check_in);
     const checkOut = toDateKey(row.check_out);
     if (state.reservationsFilterCheckInFrom && checkIn && checkIn < state.reservationsFilterCheckInFrom) return false;
+    if (state.reservationsFilterCheckInTo && checkIn && checkIn > state.reservationsFilterCheckInTo) return false;
     if (state.reservationsFilterCheckOutTo && checkOut && checkOut > state.reservationsFilterCheckOutTo) return false;
 
     const nights = Number(row.nights);
@@ -3847,10 +3848,10 @@ function setupSalesSection() {
   if (!monthSelect || !yearSelect) return;
 
   if (periodBySelect) {
-    const current = String(state.salesPeriodBy || "check_in");
+    const current = String(state.salesPeriodBy || "sale_date");
     periodBySelect.value = current;
     periodBySelect.addEventListener("change", () => {
-      state.salesPeriodBy = periodBySelect.value || "check_in";
+      state.salesPeriodBy = periodBySelect.value || "sale_date";
       window.localStorage.setItem("sales_period_by", state.salesPeriodBy);
       loadMonthlyReport();
     });
@@ -3898,7 +3899,7 @@ function setupSalesSection() {
     const cabin = cabinFilter?.value || "";
     const cat = categoryFilter?.value || "";
 
-    const periodBy = String(state.salesPeriodBy || "check_in");
+    const periodBy = String(state.salesPeriodBy || "sale_date");
     let salesUrl = `/api/sales?from=${from}&to=${to}&period_by=${encodeURIComponent(periodBy)}`;
     if (guest) salesUrl += `&q=${encodeURIComponent(guest)}`;
     if (cabin) salesUrl += `&cabin_id=${cabin}`;
