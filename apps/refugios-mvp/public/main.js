@@ -3505,6 +3505,7 @@ function bindReservationsFilters() {
   const debt = document.getElementById("reservations-filter-debt");
   const name = document.getElementById("reservations-filter-name");
   const checkInFrom = document.getElementById("reservations-filter-check-in-from");
+  const checkInTo = document.getElementById("reservations-filter-check-in-to");
   const checkOutTo = document.getElementById("reservations-filter-check-out-to");
   const minNights = document.getElementById("reservations-filter-min-nights");
   const maxNights = document.getElementById("reservations-filter-max-nights");
@@ -3535,6 +3536,14 @@ function bindReservationsFilters() {
     checkInFrom.value = state.reservationsFilterCheckInFrom;
     checkInFrom.addEventListener("change", async () => {
       state.reservationsFilterCheckInFrom = checkInFrom.value || "";
+      await loadAll();
+    });
+  }
+
+  if (checkInTo) {
+    checkInTo.value = state.reservationsFilterCheckInTo;
+    checkInTo.addEventListener("change", async () => {
+      state.reservationsFilterCheckInTo = checkInTo.value || "";
       await loadAll();
     });
   }
