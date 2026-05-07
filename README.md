@@ -57,6 +57,10 @@ Si necesitas copiar esta plantilla a otros repositorios, ejecuta `scripts/apply-
 ## Deploy
 El proyecto generado incluye `DEPLOY.md` con pasos por proveedor.
 
+### Estado del proyecto
+- Fuente de verdad de estado operativo: `docs/PROJECT_STATUS.md`.
+- Actualizar este documento cuando cambien prioridad, estado, completitud o siguiente paso.
+
 ### URLs
 - Web (Render): `https://refugios.onrender.com/`
 
